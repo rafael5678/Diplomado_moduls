@@ -71,6 +71,9 @@ services:
       - CACHE_SILLAS_TTL_SECONDS=240
       - CACHE_VIAJES_TTL_SECONDS=300
       - CACHE_LOCK_TIMEOUT_MILLIS=5000
+      # ADR-004: Reserva de sillas
+      - RESERVAS_TIEMPO_MINUTOS=10
+      - RESERVAS_LIBERACION_INTERVALO_MS=60000
     depends_on:
       redis:
         condition: service_healthy
