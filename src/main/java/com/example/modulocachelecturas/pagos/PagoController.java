@@ -37,15 +37,18 @@ public class PagoController {
             );
         }
 
-        String reservaId = (String) solicitud.get("reservaId");
-        String documento = (String) solicitud.get("documento");
+        String reservaId = obtenerTexto(solicitud, "reservaId");
+        String documento = obtenerTexto(solicitud, "documento");
 
         Long valorEnPesos;
 
         try {
+            Object valor = solicitud.get("valorEnPesos");
+
             valorEnPesos = Long.valueOf(
-                    solicitud.get("valorEnPesos").toString()
+                    valor.toString()
             );
+
         } catch (RuntimeException error) {
             throw new IllegalArgumentException(
                     "El valorEnPesos debe ser un número entero"
@@ -70,6 +73,29 @@ public class PagoController {
         return ResponseEntity.ok(
                 RespuestaPago.desde(pago)
         );
+    }
+
+    private String obtenerTexto(
+            Map<String, Object> solicitud,
+            String campo) {
+
+        Object valor = solicitud.get(campo);
+
+        if (!(valor instanceof String)) {
+            throw new IllegalArgumentException(
+                    "El campo " + campo + " debe ser un texto"
+            );
+        }
+
+        return (String) valor;
+    }
+
+    @ExceptionHandler(ConflictoIdempotenciaException.class)
+    public ResponseEntity<Map<String, String>> manejarConflicto(
+            ConflictoIdempotenciaException error) {
+
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(Map.of("error", error.getMessage()));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

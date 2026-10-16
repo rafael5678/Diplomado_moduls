@@ -114,7 +114,7 @@ public class PagoService {
                 || !Objects.equals(pago.getDocumento(), documento)
                 || !Objects.equals(pago.getValorEnPesos(), valorEnPesos)) {
 
-            throw new IllegalArgumentException(
+            throw new ConflictoIdempotenciaException(
                     "La llave de idempotencia ya pertenece a otra solicitud"
             );
         }
