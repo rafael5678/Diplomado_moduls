@@ -1,5 +1,12 @@
-package com.example.modulocachelecturas;
+package com.example.modulocachelecturas.service;
 
+import com.example.modulocachelecturas.controller.ViajeDTOs.*;
+import com.example.modulocachelecturas.model.EstadoSilla;
+import com.example.modulocachelecturas.model.Silla;
+import com.example.modulocachelecturas.model.Viaje;
+import com.example.modulocachelecturas.repository.CacheRepository;
+import com.example.modulocachelecturas.repository.SillaRepository;
+import com.example.modulocachelecturas.repository.ViajeRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -44,7 +51,6 @@ public class CacheSillasService {
     @Value("${cache.lock.max-retries:10}")
     private int lockMaxRetries;
 
-    // Métricas en memoria para telemetría del ASR 1
     private final AtomicLong totalRequests = new AtomicLong(0);
     private final AtomicLong cacheHits = new AtomicLong(0);
     private final AtomicLong cacheMisses = new AtomicLong(0);
@@ -78,7 +84,7 @@ public class CacheSillasService {
 
         // 2. Cache Miss: Activar protección Anti-Cache Stampede mediante Mutex Lock Distribuido
         cacheMisses.incrementAndGet();
-        log.warn("[Cache Miss] No existe caché para clave: {}. Iniciando flujo de reconstrucción controlado.", cacheKey);
+        log.warn("[Cache Miss] No existe caché para clave: {}. Iniciando reconstrucción controlada.", cacheKey);
 
         String lockKey = String.format(LOCK_PREFIX_SILLAS, viajeId);
         String lockValue = UUID.randomUUID().toString();
@@ -87,9 +93,8 @@ public class CacheSillasService {
 
         if (acquired) {
             mutexLockAcquisitions.incrementAndGet();
-            log.info("[Mutex Lock Acquired] Este hilo reconstruirá la caché para viajeId: {}", viajeId);
+            log.info("[Mutex Lock Acquired] Reconstruyendo caché para viajeId: {}", viajeId);
             try {
-                // Doble chequeo por si otro hilo terminó justo antes de que adquiriéramos el lock
                 Optional<MapaSillasDTO> doubleCheck = cacheRepository.get(cacheKey, MapaSillasDTO.class);
                 if (doubleCheck.isPresent()) {
                     MapaSillasDTO dto = doubleCheck.get();
@@ -98,27 +103,25 @@ public class CacheSillasService {
                     return dto;
                 }
 
-                // 3. Consultar la base de datos relacional (PostgreSQL)
+                // 3. Consultar PostgreSQL
                 MapaSillasDTO freshData = loadFromDatabase(viajeId);
                 freshData.setSource("DATABASE_POSTGRES (Miss)");
                 freshData.setCachedAt(LocalDateTime.now());
                 freshData.setResponseTimeMs(System.currentTimeMillis() - startTime);
 
-                // 4. Guardar en Redis con TTL de 180s - 300s (por defecto 240s)
+                // 4. Guardar en Redis con TTL de 240s
                 cacheRepository.set(cacheKey, freshData, sillasTtlSeconds);
-                log.info("[Cache Rebuilt] Caché almacenada exitosamente en Redis para viajeId: {} con TTL={}s", viajeId, sillasTtlSeconds);
+                log.info("[Cache Rebuilt] Caché almacenada en Redis para viajeId: {} con TTL={}s", viajeId, sillasTtlSeconds);
 
                 return freshData;
             } finally {
-                // 5. Liberar el lock de forma segura con Lua Script
+                // 5. Liberar lock de forma segura con Lua Script
                 cacheRepository.releaseLock(lockKey, lockValue);
-                log.debug("[Mutex Lock Released] Lock liberado para viajeId: {}", viajeId);
             }
         } else {
-            // No adquirió el lock: Otro hilo ya está reconstruyendo la caché.
-            // Esperar con backoff reintentando leer de Redis (Anti-Dogpiling)
+            // Anti-Cache Stampede: Esperar y consumir de Redis cuando el hilo que reconstruye termine
             mutexLockWaits.incrementAndGet();
-            log.warn("[Mutex Lock Busy] Otro hilo está reconstruyendo el viajeId: {}. Esperando disponibilidad...", viajeId);
+            log.warn("[Mutex Lock Busy] Otro hilo está reconstruyendo el viajeId: {}. Esperando...", viajeId);
 
             for (int retry = 0; retry < lockMaxRetries; retry++) {
                 try {
@@ -134,12 +137,12 @@ public class CacheSillasService {
                     MapaSillasDTO dto = recheck.get();
                     dto.setSource("CACHE_REDIS (Hit-AfterWait)");
                     dto.setResponseTimeMs(System.currentTimeMillis() - startTime);
-                    log.info("[Anti-Stampede Success] Petición concurrente satisfecha desde Redis tras {} reintentos", retry + 1);
+                    log.info("[Anti-Stampede Success] Petición satisfecha desde Redis tras {} reintentos", retry + 1);
                     return dto;
                 }
             }
 
-            // Fallback de seguridad si el hilo del lock tardó más del tiempo máximo
+            // Fallback de seguridad
             log.warn("[Anti-Stampede Fallback] Reintentos agotados. Consultando directamente a PostgreSQL.");
             MapaSillasDTO fallbackData = loadFromDatabase(viajeId);
             fallbackData.setSource("DATABASE_POSTGRES (Fallback)");
@@ -148,12 +151,9 @@ public class CacheSillasService {
         }
     }
 
-    /**
-     * Consulta PostgreSQL para obtener el viaje y sus sillas.
-     */
     @Transactional(readOnly = true)
     protected MapaSillasDTO loadFromDatabase(Long viajeId) {
-        log.info("[PostgreSQL Query] Ejecutando lectura en base de datos para viajeId: {}", viajeId);
+        log.info("[PostgreSQL Query] Leyendo viajeId: {}", viajeId);
         Viaje viaje = viajeRepository.findByIdWithSillas(viajeId)
                 .orElseThrow(() -> new RuntimeException("El viaje con ID " + viajeId + " no existe en el sistema"));
 
@@ -198,27 +198,16 @@ public class CacheSillasService {
                 .build();
     }
 
-    /**
-     * Estrategia de Invalidación por Evento (ADR-002).
-     * Elimina inmediatamente la clave del viaje en Redis (viaje:{id}:mapa_sillas) cuando ocurra
-     * una reserva o confirmación de silla, garantizando consistencia inmediata.
-     */
     public boolean evictMapaSillas(Long viajeId, String motivo) {
         String cacheKey = String.format(KEY_PREFIX_SILLAS, viajeId);
         boolean deleted = cacheRepository.delete(cacheKey);
-
-        // También invalidar listas de viajes disponibles que contengan este viaje
         cacheRepository.deleteByPattern("viajes:disponibles:*");
 
         invalidationCount.incrementAndGet();
-        log.info("[Cache Invalidation] Clave '{}' invalidada exitosamente. Motivo: '{}'. Estado en Redis: {}",
-                cacheKey, motivo, deleted);
+        log.info("[Cache Invalidation] Clave '{}' invalidada. Motivo: '{}'", cacheKey, motivo);
         return deleted;
     }
 
-    /**
-     * Consulta viajes disponibles aplicando Cache-Aside.
-     */
     public List<ViajeDisponibleDTO> getViajesDisponibles(String origen, String destino, String fechaStr) {
         String safeOrigen = origen != null && !origen.isBlank() ? origen.trim().toLowerCase() : "all";
         String safeDestino = destino != null && !destino.isBlank() ? destino.trim().toLowerCase() : "all";
@@ -229,7 +218,6 @@ public class CacheSillasService {
         Optional<List> cached = cacheRepository.get(cacheKey, List.class);
         if (cached.isPresent()) {
             cacheHits.incrementAndGet();
-            log.debug("[Cache Hit] Lista de viajes disponibles obtenida de Redis para clave: {}", cacheKey);
             return (List<ViajeDisponibleDTO>) cached.get();
         }
 
@@ -260,14 +248,10 @@ public class CacheSillasService {
                     .build();
         }).collect(Collectors.toList());
 
-        // Guardar en Redis con TTL de 300 segundos
         cacheRepository.set(cacheKey, result, viajesTtlSeconds);
         return result;
     }
 
-    /**
-     * Obtiene métricas en tiempo real para verificar el cumplimiento del ASR 1 y la protección de BD.
-     */
     public CacheMetricsDTO getMetrics() {
         long total = totalRequests.get();
         long hits = cacheHits.get();
@@ -289,10 +273,6 @@ public class CacheSillasService {
                 .build();
     }
 
-    /**
-     * Calentamiento de Caché (Cache Warmup) para temporada alta.
-     * Carga de forma anticipada el mapa de sillas en Redis para absorber el tráfico del pico inicial.
-     */
     public MapaSillasDTO warmupCache(Long viajeId) {
         log.info("[Cache Warmup] Precalentando caché para viajeId: {}", viajeId);
         String cacheKey = String.format(KEY_PREFIX_SILLAS, viajeId);

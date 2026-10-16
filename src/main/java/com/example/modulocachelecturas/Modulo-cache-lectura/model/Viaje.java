@@ -1,4 +1,4 @@
-package com.example.modulocachelecturas;
+package com.example.modulocachelecturas.model;
 
 import jakarta.persistence.*;
 import lombok.*;
@@ -47,7 +47,7 @@ public class Viaje implements Serializable {
     private BigDecimal precioBase;
 
     @Column(nullable = false, length = 30)
-    private String estado; // "PROGRAMADO", "EN_CURSO", "FINALIZADO", "CANCELADO"
+    private String estado;
 
     @OneToMany(mappedBy = "viaje", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @Builder.Default

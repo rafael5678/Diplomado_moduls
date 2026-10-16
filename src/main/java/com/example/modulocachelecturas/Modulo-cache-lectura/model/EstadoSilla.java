@@ -1,4 +1,4 @@
-package com.example.modulocachelecturas;
+package com.example.modulocachelecturas.model;
 
 public enum EstadoSilla {
     DISPONIBLE,

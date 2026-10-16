@@ -1,5 +1,7 @@
-package com.example.modulocachelecturas;
+package com.example.modulocachelecturas.controller;
 
+import com.example.modulocachelecturas.controller.ViajeDTOs.*;
+import com.example.modulocachelecturas.service.CacheSillasService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
@@ -28,10 +30,6 @@ public class ViajeController {
 
     private final CacheSillasService cacheSillasService;
 
-    /**
-     * Consulta el mapa de sillas de un viaje con descarga en memoria (Redis Cache-Aside).
-     * Devuelve cabecera HTTP 'X-Cache' ('HIT' o 'MISS') para auditoría de rendimiento.
-     */
     @GetMapping("/viajes/{id}/sillas")
     public ResponseEntity<MapaSillasDTO> getMapaSillas(@PathVariable("id") Long id) {
         log.info("[HTTP GET] Solicitud de mapa de sillas para viaje ID: {}", id);
@@ -45,9 +43,6 @@ public class ViajeController {
         return new ResponseEntity<>(mapa, headers, HttpStatus.OK);
     }
 
-    /**
-     * Consulta la lista de viajes disponibles con filtrado por origen, destino y fecha.
-     */
     @GetMapping("/viajes/disponibles")
     public ResponseEntity<List<ViajeDisponibleDTO>> getViajesDisponibles(
             @RequestParam(value = "origen", required = false) String origen,
@@ -58,10 +53,6 @@ public class ViajeController {
         return ResponseEntity.ok(disponibles);
     }
 
-    /**
-     * Endpoint de Invalidación de Caché por Evento.
-     * Invocado por los módulos de Reservas o Pagos tras confirmar o liberar una silla.
-     */
     @PostMapping("/cache/invalidate")
     public ResponseEntity<Map<String, Object>> invalidateCache(@RequestBody InvalidateCacheRequest request) {
         log.info("[HTTP POST] Invalidación de caché solicitada para viajeId: {}, motivo: {}",
@@ -80,18 +71,12 @@ public class ViajeController {
         return ResponseEntity.ok(response);
     }
 
-    /**
-     * Endpoint de Observabilidad y Métricas para validar el ASR 1 (Hit Ratio y DB Reads Saved).
-     */
     @GetMapping("/cache/metrics")
     public ResponseEntity<CacheMetricsDTO> getCacheMetrics() {
         CacheMetricsDTO metrics = cacheSillasService.getMetrics();
         return ResponseEntity.ok(metrics);
     }
 
-    /**
-     * Calentamiento de caché para temporada alta (Cache Pre-warming).
-     */
     @PostMapping("/cache/warmup/{viajeId}")
     public ResponseEntity<MapaSillasDTO> warmupCache(@PathVariable("viajeId") Long viajeId) {
         log.info("[HTTP POST] Solicitud de Warmup de caché para viajeId: {}", viajeId);

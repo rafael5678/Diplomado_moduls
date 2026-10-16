@@ -1,5 +1,9 @@
 package com.example.modulocachelecturas;
 
+import com.example.modulocachelecturas.controller.ViajeDTOs.*;
+import com.example.modulocachelecturas.model.*;
+import com.example.modulocachelecturas.repository.*;
+import com.example.modulocachelecturas.service.CacheSillasService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

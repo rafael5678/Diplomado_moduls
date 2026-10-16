@@ -1,5 +1,6 @@
-package com.example.modulocachelecturas;
+package com.example.modulocachelecturas.repository;
 
+import com.example.modulocachelecturas.model.Viaje;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;

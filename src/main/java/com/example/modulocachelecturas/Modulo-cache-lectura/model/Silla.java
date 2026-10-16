@@ -1,4 +1,4 @@
-package com.example.modulocachelecturas;
+package com.example.modulocachelecturas.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
@@ -30,14 +30,14 @@ public class Silla implements Serializable {
     private Integer numeroSilla;
 
     @Column(nullable = false)
-    private Integer piso; // 1 o 2
+    private Integer piso;
 
     @Column(nullable = false, length = 20)
-    private String ubicacion; // "VENTANA", "PASILLO"
+    private String ubicacion;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    private EstadoSilla estado; // DISPONIBLE, RESERVADA, OCUPADA
+    private EstadoSilla estado;
 
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal precio;

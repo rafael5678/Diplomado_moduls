@@ -1,4 +1,4 @@
-package com.example.modulocachelecturas;
+package com.example.modulocachelecturas.service;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -20,10 +20,6 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 import java.time.Duration;
 
-/**
- * Configuración de resiliencia y serialización para Redis.
- * Cumple con ADR-002: conexión resiliente con timeouts, reintentos y soporte de serialización JSON con JavaTime.
- */
 @Configuration
 public class RedisConfig {
 
@@ -40,7 +36,6 @@ public class RedisConfig {
     public LettuceConnectionFactory redisConnectionFactory() {
         RedisStandaloneConfiguration serverConfig = new RedisStandaloneConfiguration(redisHost, redisPort);
 
-        // Opciones de socket y resiliencia para alta concurrencia
         SocketOptions socketOptions = SocketOptions.builder()
                 .connectTimeout(Duration.ofMillis(2000))
                 .keepAlive(true)
@@ -79,11 +74,8 @@ public class RedisConfig {
         StringRedisSerializer stringSerializer = new StringRedisSerializer();
         GenericJackson2JsonRedisSerializer jsonSerializer = new GenericJackson2JsonRedisSerializer(redisObjectMapper);
 
-        // Claves como String
         template.setKeySerializer(stringSerializer);
         template.setHashKeySerializer(stringSerializer);
-
-        // Valores como JSON con soporte para LocalDateTime / LocalDate
         template.setValueSerializer(jsonSerializer);
         template.setHashValueSerializer(jsonSerializer);
 
@@ -91,10 +83,6 @@ public class RedisConfig {
         return template;
     }
 
-    /**
-     * Script Lua para liberación atómica y segura del Mutex Lock.
-     * Solo libera el lock si el valor (token UUID) coincide con el asignado por el hilo.
-     */
     @Bean
     public DefaultRedisScript<Long> unlockScript() {
         String script = "if redis.call('get', KEYS[1]) == ARGV[1] then " +

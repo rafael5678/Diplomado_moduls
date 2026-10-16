@@ -1,4 +1,4 @@
-package com.example.modulocachelecturas;
+package com.example.modulocachelecturas.repository;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -31,7 +31,6 @@ public class RedisCacheRepository implements CacheRepository {
             if (targetClass.isInstance(rawValue)) {
                 return Optional.of(targetClass.cast(rawValue));
             }
-            // Si el valor viene como LinkedHashMap (deserialización genérica de Jackson), convertirlo
             T converted = redisObjectMapper.convertValue(rawValue, targetClass);
             return Optional.ofNullable(converted);
         } catch (Exception e) {
@@ -68,10 +67,10 @@ public class RedisCacheRepository implements CacheRepository {
             Set<String> keys = redisTemplate.keys(pattern);
             if (keys != null && !keys.isEmpty()) {
                 redisTemplate.delete(keys);
-                log.info("[CacheRepository] Se eliminaron {} claves que coincidían con el patrón '{}'", keys.size(), pattern);
+                log.info("[CacheRepository] Se eliminaron {} claves que coincidian con el patron '{}'", keys.size(), pattern);
             }
         } catch (Exception e) {
-            log.error("[CacheRepository] Error al eliminar patrón {} de Redis: {}", pattern, e.getMessage());
+            log.error("[CacheRepository] Error al eliminar patron {} de Redis: {}", pattern, e.getMessage());
         }
     }
 
