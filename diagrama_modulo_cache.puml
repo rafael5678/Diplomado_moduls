@@ -1,0 +1,172 @@
+@startuml Diagrama_Modulo_Cache_Lecturas
+!theme plain
+allowmixing
+
+skinparam backgroundColor #FFFFFF
+skinparam roundcorner 8
+skinparam componentStyle uml2
+skinparam classBackgroundColor #FFFFFF
+skinparam classBorderColor #2B3A42
+skinparam arrowColor #0056B3
+
+title Arquitectura Java 100% - Módulo ADR-002: Caché Distribuida y Descarga de Lecturas\n(Diplomado en Arquitectura de Software - Cooperativa de Transporte)
+
+' ============================================================================
+' 1. CAPA CONTROLLER (Exposición REST)
+' ============================================================================
+package "com.example.modulocachelecturas.controller" #E3F2FD {
+    class ViajeController <<@RestController>> {
+        - cacheSillasService : CacheSillasService
+        + getMapaSillas(id: Long) : ResponseEntity<MapaSillasDTO>
+        + getViajesDisponibles(origen: String, destino: String, fecha: String) : ResponseEntity<List<ViajeDisponibleDTO>>
+        + invalidateCache(req: InvalidateCacheRequest) : ResponseEntity<Map<String, Object>>
+        + getCacheMetrics() : ResponseEntity<CacheMetricsDTO>
+        + warmupCache(viajeId: Long) : ResponseEntity<MapaSillasDTO>
+    }
+
+    class ViajeDTOs <<Contratos de Datos Java>> {
+        + {static} class MapaSillasDTO
+        + {static} class SillaDTO
+        + {static} class ViajeDisponibleDTO
+        + {static} class InvalidateCacheRequest
+        + {static} class CacheMetricsDTO
+    }
+}
+
+' ============================================================================
+' 2. CAPA SERVICE (Lógica de Negocio y Resiliencia)
+' ============================================================================
+package "com.example.modulocachelecturas.service" #E8F5E9 {
+    class CacheSillasService <<@Service>> {
+        - cacheRepository : CacheRepository
+        - viajeRepository : ViajeRepository
+        - sillasTtlSeconds : long = 240
+        - viajesTtlSeconds : long = 300
+        - lockTimeoutMillis : long = 5000
+        - totalRequests : AtomicLong
+        - cacheHits : AtomicLong
+        - cacheMisses : AtomicLong
+        + getMapaSillas(viajeId: Long) : MapaSillasDTO
+        + evictMapaSillas(viajeId: Long, motivo: String) : boolean
+        + getViajesDisponibles(origen, destino, fecha) : List<ViajeDisponibleDTO>
+        + getMetrics() : CacheMetricsDTO
+        + warmupCache(viajeId: Long) : MapaSillasDTO
+        # loadFromDatabase(viajeId: Long) : MapaSillasDTO
+    }
+
+    class RedisConfig <<@Configuration>> {
+        + redisObjectMapper() : ObjectMapper
+        + redisTemplate(factory, mapper) : RedisTemplate<String, Object>
+        + unlockScript() : DefaultRedisScript<Long>
+    }
+}
+
+' ============================================================================
+' 3. CAPA REPOSITORY (Acceso a Datos - Redis y PostgreSQL)
+' ============================================================================
+package "com.example.modulocachelecturas.repository" #FFF3E0 {
+    interface CacheRepository <<interface>> {
+        + get(key: String, targetClass: Class<T>) : Optional<T>
+        + set(key: String, value: Object, ttlSeconds: long) : void
+        + delete(key: String) : boolean
+        + deleteByPattern(pattern: String) : void
+        + exists(key: String) : boolean
+        + acquireLock(lockKey: String, lockValue: String, expireMillis: long) : boolean
+        + releaseLock(lockKey: String, lockValue: String) : boolean
+    }
+
+    class RedisCacheRepository <<@Repository>> {
+        - redisTemplate : RedisTemplate<String, Object>
+        - unlockScript : DefaultRedisScript<Long>
+        - redisObjectMapper : ObjectMapper
+        + get(key, targetClass) : Optional<T>
+        + set(key, value, ttlSeconds) : void
+        + delete(key) : boolean
+        + acquireLock(lockKey, lockValue, expireMillis) : boolean
+        + releaseLock(lockKey, lockValue) : boolean
+    }
+
+    interface ViajeRepository <<@Repository / JpaRepository>> {
+        + findByIdWithSillas(id: Long) : Optional<Viaje>
+        + findViajesDisponibles(origen: String, destino: String, fecha: LocalDate) : List<Viaje>
+    }
+}
+
+' ============================================================================
+' 4. CAPA MODEL (Entidades JPA del Dominio de Transporte)
+' ============================================================================
+package "com.example.modulocachelecturas.model" #FCE4EC {
+    class Viaje <<@Entity>> {
+        - id : Long
+        - codigoViaje : String
+        - ruta : Ruta
+        - fechaSalida : LocalDate
+        - horaSalida : LocalTime
+        - busPlaca : String
+        - capacidadTotal : Integer
+        - precioBase : BigDecimal
+        - estado : String
+        - sillas : List<Silla>
+    }
+
+    class Ruta <<@Entity>> {
+        - id : Long
+        - codigoRuta : String
+        - origen : String
+        - destino : String
+        - distanciaKm : Double
+        - duracionEstimadaHoras : Double
+    }
+
+    class Silla <<@Entity>> {
+        - id : Long
+        - viaje : Viaje
+        - numeroSilla : Integer
+        - piso : Integer
+        - ubicacion : String
+        - estado : EstadoSilla
+        - precio : BigDecimal
+    }
+
+    enum EstadoSilla <<enum>> {
+        DISPONIBLE
+        RESERVADA
+        OCUPADA
+    }
+}
+
+' ============================================================================
+' MOTORES DE DATOS EXTERNOS
+' ============================================================================
+database "Redis 7 (RAM Cache)" as Redis #FFCDD2
+database "PostgreSQL 16 (BD Relacional)" as Postgres #C8E6C9
+
+' ============================================================================
+' RELACIONES Y FLUJO DE DATOS
+' ============================================================================
+ViajeController --> CacheSillasService : Inyecta y delega peticiones
+ViajeController ..> ViajeDTOs : Expone respuestas en DTOs
+
+CacheSillasService --> CacheRepository : 1° Consulta Redis (Cache-Aside)
+CacheSillasService --> ViajeRepository : 2° Consulta BD en Cache Miss
+CacheSillasService ..> ViajeDTOs : Mapea y encapsula datos
+RedisConfig ..> RedisCacheRepository : Inyecta beans de configuración
+
+RedisCacheRepository ..|> CacheRepository : implements
+RedisCacheRepository --> Redis : RESP / Puerto 6379 (Hit < 15ms)
+
+ViajeRepository --> Postgres : SQL JOIN FETCH / Puerto 5432
+
+Viaje "1" *-- "40" Silla : contiene (CascadeType.ALL)
+Viaje "many" --> "1" Ruta : asocia trayecto
+Silla --> EstadoSilla : clasifica estado
+
+note bottom of CacheSillasService
+  <b>ADR-002: Patrón Cache-Aside + Mutex Lock</b>
+  1. Si existe en Redis (Hit) -> Retorna en < 15ms sin tocar BD.
+  2. Si expira (Miss) -> Adquiere Mutex Lock (SET NX PX).
+     Solo 1 hilo consulta PostgreSQL y guarda con TTL=240s;
+     los demás hilos esperan en cola y leen de memoria.
+end note
+
+@enduml
