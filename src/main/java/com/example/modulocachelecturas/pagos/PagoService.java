@@ -1,10 +1,10 @@
 
 package com.example.modulocachelecturas.pagos;
 
+import java.util.Objects;
+
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
-
-import java.util.Objects;
 
 @Service
 public class PagoService {
@@ -69,11 +69,14 @@ public class PagoService {
                     documento,
                     valorEnPesos
             );
+
             return existente;
         }
 
+        Pago pago;
+
         try {
-            return crearPago(
+            pago = crearPago(
                     llaveIdempotencia,
                     reservaId,
                     documento,
@@ -91,11 +94,14 @@ public class PagoService {
                         documento,
                         valorEnPesos
                 );
+
                 return pagoOriginal;
             }
 
             throw error;
         }
+
+        return ejecutarCobro(pago);
     }
 
     private void validarMismaSolicitud(
@@ -116,24 +122,26 @@ public class PagoService {
 
     public Pago ejecutarCobro(Pago pago) {
 
-    if (pago.getEstado() != EstadoPago.EN_PROCESO) {
-        return pago;
-    }
+        if (pago.getEstado() != EstadoPago.EN_PROCESO) {
+            return pago;
+        }
 
-    boolean puedeCobrar = registro.intentarReclamarCobro(pago.getId());
+        boolean puedeCobrar = registro.intentarReclamarCobro(
+                pago.getId()
+        );
 
-    if (!puedeCobrar) {
-        return registro.consultarPago(pago.getId());
-    }
+        if (!puedeCobrar) {
+            return registro.consultarPago(pago.getId());
+        }
 
         EstadoPago resultado = pasarela.cobrar(
-            pago.getReferencia(),
-            pago.getValorEnPesos()
+                pago.getReferencia(),
+                pago.getValorEnPesos()
         );
 
         return registro.actualizarEstado(
-            pago.getId(),
-            resultado
+                pago.getId(),
+                resultado
         );
     }
 }
