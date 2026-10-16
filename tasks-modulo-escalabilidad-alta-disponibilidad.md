@@ -20,7 +20,7 @@ Rama: `modulo-escalabilidad-alta-disponibilidad`
   - [x] Integrar con pasarela y simulación de emisión de tiquete digital tras confirmación de pago. <!-- id: 4.3 -->
 - [x] 5. Pruebas Automatizadas y Verificación de Criterios ASR-001 <!-- id: 5 -->
   - [x] Pruebas unitarias de balanceo, salud y procesamiento asíncrono con JUnit y Mockito. <!-- id: 5.1 -->
-  - [x] Prueba de estrés/simulación de concurrencia (script PowerShell/Postman) para verificar failover de nodos, p95 y cero rechazos por saturación. <!-- id: 5.2 -->
+  - [x] Prueba de estrés/simulación de concurrencia (script PowerShell/Postman en `src/test/...`) para verificar failover de nodos, p95 y cero rechazos por saturación. <!-- id: 5.2 -->
   - [x] Colección Postman de verificación y testing del módulo. <!-- id: 5.3 -->
 - [x] 6. Finalización, Revisión y Commits <!-- id: 6 -->
   - [x] Verificación de compilación Maven (`mvn test` o `mvn clean compile`). <!-- id: 6.1 -->
