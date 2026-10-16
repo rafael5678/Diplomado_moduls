@@ -1,3 +1,4 @@
+
 package com.example.modulocachelecturas.pagos;
 
 import java.util.Map;
@@ -22,7 +23,7 @@ public class PagoController {
     }
 
     @PostMapping
-    public ResponseEntity<Map<String, Object>> crearCobro(
+    public ResponseEntity<RespuestaPago> crearCobro(
             @RequestHeader(
                     value = "Idempotency-Key",
                     required = false
@@ -38,6 +39,7 @@ public class PagoController {
 
         String reservaId = (String) solicitud.get("reservaId");
         String documento = (String) solicitud.get("documento");
+
         Long valorEnPesos;
 
         try {
@@ -65,10 +67,9 @@ public class PagoController {
                 valorEnPesos
         );
 
-        return ResponseEntity.ok(Map.of(
-                "referencia", pago.getReferencia(),
-                "estado", pago.getEstado().name()
-        ));
+        return ResponseEntity.ok(
+                RespuestaPago.desde(pago)
+        );
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
