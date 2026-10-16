@@ -1,5 +1,8 @@
 
-package com.example.modulocachelecturas.pagos;
+package com.example.modulocachelecturas.pagos.repository;
+
+import com.example.modulocachelecturas.pagos.model.EstadoPago;
+import com.example.modulocachelecturas.pagos.model.Pago;
 
 import java.util.Optional;
 

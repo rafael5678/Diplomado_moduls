@@ -1,5 +1,5 @@
 
-package com.example.modulocachelecturas.pagos;
+package com.example.modulocachelecturas.pagos.model;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;

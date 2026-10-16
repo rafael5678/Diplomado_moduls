@@ -1,5 +1,11 @@
 
-package com.example.modulocachelecturas.pagos;
+package com.example.modulocachelecturas.pagos.service;
+
+import com.example.modulocachelecturas.pagos.exception.ConflictoIdempotenciaException;
+import com.example.modulocachelecturas.pagos.exception.PagoNoEncontradoException;
+import com.example.modulocachelecturas.pagos.model.EstadoPago;
+import com.example.modulocachelecturas.pagos.model.Pago;
+import com.example.modulocachelecturas.pagos.repository.PagoRepository;
 
 import java.util.Objects;
 

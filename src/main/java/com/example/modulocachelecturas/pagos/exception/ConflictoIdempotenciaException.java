@@ -1,4 +1,4 @@
-package com.example.modulocachelecturas.pagos;
+package com.example.modulocachelecturas.pagos.exception;
 
 public class ConflictoIdempotenciaException
         extends RuntimeException {
