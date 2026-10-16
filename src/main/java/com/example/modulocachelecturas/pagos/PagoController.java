@@ -6,6 +6,8 @@ import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -75,6 +77,17 @@ public class PagoController {
         );
     }
 
+    @GetMapping("/{referencia}")
+    public ResponseEntity<RespuestaPago> consultarCobro(
+            @PathVariable String referencia) {
+
+        Pago pago = pagoService.buscarPorReferencia(referencia);
+
+        return ResponseEntity.ok(
+                RespuestaPago.desde(pago)
+        );
+    }
+
     private String obtenerTexto(
             Map<String, Object> solicitud,
             String campo) {
@@ -88,6 +101,14 @@ public class PagoController {
         }
 
         return (String) valor;
+    }
+
+    @ExceptionHandler(PagoNoEncontradoException.class)
+    public ResponseEntity<Map<String, String>> manejarNoEncontrado(
+            PagoNoEncontradoException error) {
+
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Map.of("error", error.getMessage()));
     }
 
     @ExceptionHandler(ConflictoIdempotenciaException.class)

@@ -28,6 +28,20 @@ public class PagoService {
                 .orElse(null);
     }
 
+    public Pago buscarPorReferencia(String referencia) {
+
+        if (referencia == null || referencia.isBlank()) {
+            throw new IllegalArgumentException(
+                    "La referencia del pago es obligatoria"
+            );
+        }
+
+        return repositorio.findByReferencia(referencia)
+                .orElseThrow(() -> new PagoNoEncontradoException(
+                        "No se encontró un pago con esa referencia"
+                ));
+    }
+
     public Pago crearPago(
             String llaveIdempotencia,
             String reservaId,
