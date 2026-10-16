@@ -1,4 +1,6 @@
-package com.example.modulocachelecturas.pagos;
+package com.example.modulocachelecturas.pagos.controller;
+
+import com.example.modulocachelecturas.pagos.model.Pago;
 
 public record RespuestaPago(
         String referencia,

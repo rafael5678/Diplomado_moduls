@@ -1,5 +1,9 @@
 
-package com.example.modulocachelecturas.pagos;
+package com.example.modulocachelecturas.pagos.service;
+
+import com.example.modulocachelecturas.pagos.model.EstadoPago;
+import com.example.modulocachelecturas.pagos.model.Pago;
+import com.example.modulocachelecturas.pagos.repository.PagoRepository;
 
 import java.util.UUID;
 

@@ -1,5 +1,7 @@
 
-package com.example.modulocachelecturas.pagos;
+package com.example.modulocachelecturas.pagos.service;
+
+import com.example.modulocachelecturas.pagos.model.EstadoPago;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
