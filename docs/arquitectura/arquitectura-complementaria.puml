@@ -1,0 +1,53 @@
+@startuml
+title Arquitectura complementaria - Cache y Pagos
+
+top to bottom direction
+
+skinparam componentStyle rectangle
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+package "ModuloCacheLecturasApplication" {
+
+    package "Cache" {
+        [ViajeController] as viajeController
+        [CacheSillasService] as cacheService
+        [CacheRepository] as cacheRepository
+        [RedisCacheRepository] as redisRepository
+
+        viajeController --> cacheService
+        cacheService --> cacheRepository
+        cacheRepository <|.. redisRepository
+    }
+
+    package "Pagos" {
+        [API de cobros] as cobrosApi
+        [Servicio de pagos] as pagosService
+        [Persistencia de pagos] as pagosRepository
+
+        cobrosApi --> pagosService
+        pagosService --> pagosRepository
+    }
+}
+
+database "Redis" as redis
+database "PostgreSQL" as postgres
+
+redisRepository --> redis : Cache de sillas
+pagosRepository --> postgres : Registro de cobros
+
+note bottom
+  Diagrama complementario de organizacion funcional.
+
+  Cache existe en el codigo, pero sus clases
+  declaran el paquete raiz de la aplicacion.
+
+  Pagos es reconocido automaticamente por
+  Spring Modulith.
+
+  No se representan dependencias directas
+  entre Cache y Pagos porque no han sido
+  verificadas.
+end note
+
+@enduml
