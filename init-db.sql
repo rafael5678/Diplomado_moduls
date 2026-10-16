@@ -39,6 +39,28 @@ CREATE TABLE IF NOT EXISTS sillas (
     CONSTRAINT uq_viaje_silla UNIQUE (viaje_id, numero_silla)
 );
 
+-- 4. Tabla de Reservas de Silla (ADR-004: cada silla se aparta y se vende una sola vez)
+-- 'llave_activa' = 'viajeId:numeroSilla' mientras la reserva está APARTADA o VENDIDA.
+-- Su restricción UNIQUE impide que dos pasajeros tengan la misma silla al mismo tiempo,
+-- aunque las solicitudes lleguen desde servidores distintos en el mismo segundo.
+-- Al liberar la reserva queda en NULL y la silla se puede volver a apartar.
+CREATE TABLE IF NOT EXISTS reservas_silla (
+    id BIGSERIAL PRIMARY KEY,
+    viaje_id BIGINT NOT NULL REFERENCES viajes(id) ON DELETE CASCADE,
+    numero_silla INTEGER NOT NULL,
+    pasajero_id VARCHAR(60) NOT NULL,
+    estado VARCHAR(20) NOT NULL, -- 'APARTADA', 'VENDIDA', 'LIBERADA'
+    llave_activa VARCHAR(40),
+    creada_en TIMESTAMP NOT NULL,
+    vence_en TIMESTAMP NOT NULL,
+    actualizada_en TIMESTAMP,
+    CONSTRAINT uq_reserva_silla_activa UNIQUE (llave_activa),
+    CONSTRAINT ck_reserva_estado CHECK (estado IN ('APARTADA', 'VENDIDA', 'LIBERADA'))
+);
+
+-- Índice para que el proceso de liberación encuentre rápido las reservas vencidas
+CREATE INDEX IF NOT EXISTS idx_reserva_estado_vence ON reservas_silla (estado, vence_en);
+
 -- ----------------------------------------------------------------------------
 -- INSERCIÓN DE DATOS SEMILLA (Seed Data)
 -- ----------------------------------------------------------------------------
