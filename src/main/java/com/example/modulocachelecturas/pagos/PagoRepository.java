@@ -15,7 +15,10 @@ public interface PagoRepository extends JpaRepository<Pago, Long> {
 
     Optional<Pago> findByReferencia(String referencia);
 
-    @Modifying
+    @Modifying(
+            flushAutomatically = true,
+            clearAutomatically = true
+    )
     @Transactional
     @Query("""
         UPDATE Pago p
@@ -28,5 +31,24 @@ public interface PagoRepository extends JpaRepository<Pago, Long> {
     int reclamarCobro(
             @Param("pagoId") Long pagoId,
             @Param("estado") EstadoPago estado
+    );
+
+    @Modifying(
+            flushAutomatically = true,
+            clearAutomatically = true
+    )
+    @Transactional
+    @Query("""
+        UPDATE Pago p
+        SET p.estado = :nuevoEstado,
+            p.version = p.version + 1
+        WHERE p.id = :pagoId
+          AND p.estado = :estadoActual
+          AND p.cobroIniciado = true
+        """)
+    int finalizarCobro(
+            @Param("pagoId") Long pagoId,
+            @Param("estadoActual") EstadoPago estadoActual,
+            @Param("nuevoEstado") EstadoPago nuevoEstado
     );
 }

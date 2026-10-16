@@ -36,34 +36,37 @@ public class RegistroPagoService {
     @Transactional
     public Pago actualizarEstado(Long pagoId, EstadoPago nuevoEstado) {
 
-        Pago pago = repositorio.findById(pagoId)
-                .orElseThrow(() ->
-                        new IllegalStateException("No se encontró el pago")
-                );
-
-        if (pago.getEstado() != EstadoPago.EN_PROCESO) {
-
-            if (pago.getEstado() == nuevoEstado) {
-                return pago;
-            }
-
-            throw new IllegalStateException(
-                    "No se puede modificar un pago finalizado"
-            );
-        }
-
-        if (nuevoEstado == EstadoPago.EN_PROCESO) {
+        if (nuevoEstado == null || nuevoEstado == EstadoPago.EN_PROCESO) {
             throw new IllegalArgumentException(
                     "El nuevo estado debe ser APROBADO o RECHAZADO"
             );
         }
 
-        pago.cambiarEstado(nuevoEstado);
+        int filasActualizadas = repositorio.finalizarCobro(
+                pagoId,
+                EstadoPago.EN_PROCESO,
+                nuevoEstado
+        );
 
-        return repositorio.saveAndFlush(pago);
+        Pago pago = repositorio.findById(pagoId)
+                .orElseThrow(() ->
+                        new IllegalStateException("No se encontró el pago")
+                );
+
+        if (filasActualizadas == 1) {
+            return pago;
+        }
+
+        if (pago.getEstado() == nuevoEstado) {
+            return pago;
+        }
+
+        throw new IllegalStateException(
+                "No se puede modificar un pago finalizado o no reclamado"
+        );
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public Pago consultarPago(Long pagoId) {
 
         return repositorio.findById(pagoId)
@@ -72,9 +75,12 @@ public class RegistroPagoService {
                 );
     }
 
-        public boolean intentarReclamarCobro(Long pagoId) {int filasActualizadas = repositorio.reclamarCobro(
-            pagoId,
-            EstadoPago.EN_PROCESO
+    @Transactional
+    public boolean intentarReclamarCobro(Long pagoId) {
+
+        int filasActualizadas = repositorio.reclamarCobro(
+                pagoId,
+                EstadoPago.EN_PROCESO
         );
 
         return filasActualizadas == 1;
