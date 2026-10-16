@@ -12,137 +12,129 @@ import java.time.LocalTime;
 import java.util.List;
 
 /**
- * CONTRATOS DE DATOS (DTOs) CONSOLIDADOS PARA LA API DE CACHÉ Y LECTURAS.
- *
- * Agrupa las estructuras de transferencia de datos en un solo archivo para evitar
- * dispersión de clases y optimizar el tamaño del módulo.
+ * CONTRATOS DE DATOS (DTOs) DE LA API DE CACHÉ Y LECTURAS.
+ * 
+ * Los DTOs (Data Transfer Objects) aíslan el modelo interno de la base de datos
+ * del JSON público que viaja por la red hacia los clientes o hacia otros módulos.
  */
 public class ViajeDTOs {
 
-    /**
-     * DTO ligero para representar una silla en la vista interactiva.
-     */
-    @Getter
-    @Setter
-    @NoArgsConstructor
-    @AllArgsConstructor
-    @Builder
+    // =========================================================================
+    // 1. DTO DE ASIENTO INDIVIDUAL
+    // =========================================================================
+    @Data               // Lombok: Autogenera Getters, Setters, toString y equals
+    @Builder            // Lombok: Permite construir objetos con patrón Builder (.builder().build())
+    @NoArgsConstructor  // Constructor vacío requerido para deserializar desde JSON
+    @AllArgsConstructor // Constructor con todos los atributos
     public static class SillaDTO implements Serializable {
         private static final long serialVersionUID = 1L;
 
-        private Long id;
-        private Integer numeroSilla;
-        private Integer piso;
-        private String ubicacion; // "VENTANA" o "PASILLO"
-        private EstadoSilla estado; // DISPONIBLE, RESERVADA, OCUPADA
-        private BigDecimal precio;
+        private Long id;            // ID único de la silla en la base de datos
+        private Integer numeroSilla;// Número visible del asiento (1 al 40)
+        private Integer piso;       // Nivel del autobús (Piso 1 o Piso 2)
+        private String ubicacion;   // Distribución física: "VENTANA" o "PASILLO"
+        private EstadoSilla estado; // Estado actual: DISPONIBLE, RESERVADA u OCUPADA
+        private BigDecimal precio;  // Precio monetario exacto del asiento
     }
 
-    /**
-     * DTO principal del Mapa de Sillas (ADR-002):
-     * Es el objeto que se serializa y se guarda en memoria Redis.
-     * Contiene metadatos de auditoría: 'source' (procedencia del dato) y 'responseTimeMs'.
-     */
-    @Getter
-    @Setter
+    // =========================================================================
+    // 2. DTO PRINCIPAL: MAPA INTERACTIVO DE SILLAS (Objeto guardado en Redis)
+    // =========================================================================
+    @Data
+    @Builder
     @NoArgsConstructor
     @AllArgsConstructor
-    @Builder
     public static class MapaSillasDTO implements Serializable {
         private static final long serialVersionUID = 1L;
 
-        private Long viajeId;
-        private String codigoViaje;
-        private String rutaCodigo;
-        private String origen;
-        private String destino;
+        private Long viajeId;          // Identificador del viaje
+        private String codigoViaje;    // Código de despacho (ej: "VIAJE-2026-001")
+        private String rutaCodigo;     // Código de la ruta (ej: "RUTA-BOG-MED")
+        private String origen;         // Ciudad o terminal de salida
+        private String destino;        // Ciudad o terminal de llegada
 
         @JsonFormat(pattern = "yyyy-MM-dd")
-        private LocalDate fechaSalida;
+        private LocalDate fechaSalida; // Fecha del viaje en formato legible (YYYY-MM-DD)
 
         @JsonFormat(pattern = "HH:mm:ss")
-        private LocalTime horaSalida;
+        private LocalTime horaSalida;  // Hora exacta de salida (HH:mm:ss)
 
-        private String busPlaca;
-        private int totalSillas;
-        private int sillasDisponibles;
-        private int sillasReservadas;
-        private int sillasOcupadas;
-        private List<SillaDTO> sillas;
+        private String busPlaca;       // Placa del autobús asignado
+        private int totalSillas;       // Capacidad máxima de asientos (ej: 40)
+        private int sillasDisponibles; // Conteo en tiempo real de sillas libres
+        private int sillasReservadas;  // Conteo de sillas en proceso de pago
+        private int sillasOcupadas;    // Conteo de sillas vendidas definitivamente
+        private List<SillaDTO> sillas; // Colección ordenada de los 40 asientos
 
-        private String source; // "CACHE_REDIS (Hit)" o "DATABASE_POSTGRES (Miss)"
-        private Long responseTimeMs; // Tiempo de respuesta en milisegundos
+        // Metadatos técnicos de auditoría del ASR 1:
+        private String source;         // Origen del dato: "CACHE_REDIS (Hit)" o "DATABASE_POSTGRES (Miss)"
+        private Long responseTimeMs;   // Latencia real de respuesta en milisegundos
 
         @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
-        private LocalDateTime cachedAt;
+        private LocalDateTime cachedAt;// Fecha y hora exacta en la que se guardó en memoria RAM
     }
 
-    /**
-     * DTO para el listado de viajes programados disponibles en el sistema.
-     */
-    @Getter
-    @Setter
+    // =========================================================================
+    // 3. DTO PARA BÚSQUEDA DE VIAJES PROGRAMADOS DISPONIBLES
+    // =========================================================================
+    @Data
+    @Builder
     @NoArgsConstructor
     @AllArgsConstructor
-    @Builder
     public static class ViajeDisponibleDTO implements Serializable {
         private static final long serialVersionUID = 1L;
 
-        private Long viajeId;
-        private String codigoViaje;
-        private String origen;
-        private String destino;
+        private Long viajeId;          // Identificador numérico del viaje
+        private String codigoViaje;    // Código identificador operativo
+        private String origen;         // Ciudad de partida
+        private String destino;        // Ciudad de llegada
 
         @JsonFormat(pattern = "yyyy-MM-dd")
-        private LocalDate fechaSalida;
+        private LocalDate fechaSalida; // Día programado del viaje
 
         @JsonFormat(pattern = "HH:mm:ss")
-        private LocalTime horaSalida;
+        private LocalTime horaSalida;  // Horario de salida
 
-        private String busPlaca;
-        private BigDecimal precioBase;
-        private int sillasDisponibles;
-        private int capacidadTotal;
-        private String estado;
-        private String source;
+        private String busPlaca;       // Vehículo asignado
+        private BigDecimal precioBase; // Tarifa mínima del pasaje
+        private int sillasDisponibles; // Cantidad de puestos libres aún a la venta
+        private int capacidadTotal;    // Puestos totales del bus
+        private String estado;         // Estado del viaje (PROGRAMADO, EN_CURSO)
+        private String source;         // De dónde provino la consulta (CACHE o DB)
     }
 
-    /**
-     * Payload para solicitud de invalidación de caché por evento.
-     * Enviado por los módulos de Reservas o Pagos.
-     */
-    @Getter
-    @Setter
+    // =========================================================================
+    // 4. PAYLOAD PARA INVALIDACIÓN DE CACHÉ POR EVENTO
+    // =========================================================================
+    @Data
+    @Builder
     @NoArgsConstructor
     @AllArgsConstructor
-    @Builder
     public static class InvalidateCacheRequest implements Serializable {
         private static final long serialVersionUID = 1L;
 
-        private Long viajeId; // ID del viaje cuya caché de sillas debe borrarse
-        private String motivo;  // Motivo descriptivo (ej: "RESERVA_CONFIRMADA", "PAGO_EXITOSO")
+        private Long viajeId;  // ID del viaje cuyo mapa en Redis debe borrarse de inmediato
+        private String motivo; // Causa del evento (ej: "RESERVA_CONFIRMADA", "PAGO_APROBADO")
     }
 
-    /**
-     * DTO de Observabilidad y Métricas en tiempo real (Validación del ASR 1):
-     * Expone indicadores clave de rendimiento (KPIs de arquitectura).
-     */
-    @Getter
-    @Setter
+    // =========================================================================
+    // 5. DTO DE TELEMETRÍA Y OBSERVABILIDAD (Validación del ASR 1)
+    // =========================================================================
+    @Data
+    @Builder
     @NoArgsConstructor
     @AllArgsConstructor
-    @Builder
     public static class CacheMetricsDTO implements Serializable {
         private static final long serialVersionUID = 1L;
 
-        private long totalRequests; // Total de peticiones recibidas
-        private long cacheHits; // Peticiones resueltas en memoria RAM
-        private long cacheMisses; // Peticiones que requirieron ir a PostgreSQL
-        private double hitRatioPercentage; // Porcentaje de efectividad de caché
-        private double dbReadsSavedPercentage; // Carga de lectura ahorrada a la BD (meta > 85-90%)
-        private long cacheInvalidations; // Cantidad de invalidaciones ejecutadas
-        private long mutexLockAcquisitions; // Bloqueos adquiridos exitosamente
-        private long mutexLockWaits; // Hilos concurrentes protegidos de colapsar la BD
-        private boolean asr1PerformanceTargetMet; // Indica si se cumple el SLA de rendimiento
+        private long totalRequests;            // Total acumulado de lecturas recibidas
+        private long cacheHits;                // Peticiones resueltas en memoria RAM (ultra-rápidas)
+        private long cacheMisses;              // Peticiones que tuvieron que consultar PostgreSQL
+        private double hitRatioPercentage;     // Porcentaje de efectividad (% aciertos en memoria)
+        private double dbReadsSavedPercentage; // Carga de lectura ahorrada a la base de datos
+        private long cacheInvalidations;       // Veces que se limpió la caché por eventos de venta
+        private long mutexLockAcquisitions;    // Bloqueos adquiridos para proteger la BD
+        private long mutexLockWaits;           // Peticiones concurrentes protegidas del colapso
+        private boolean asr1PerformanceTargetMet;// Bandera booleana: true si el ahorro supera el 85%
     }
 }

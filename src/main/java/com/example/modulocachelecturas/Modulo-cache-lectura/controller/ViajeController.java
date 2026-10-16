@@ -3,120 +3,85 @@ package com.example.modulocachelecturas.controller;
 import com.example.modulocachelecturas.controller.ViajeDTOs.*;
 import com.example.modulocachelecturas.service.CacheSillasService;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
  * CONTROLADOR REST - MÓDULO ADR-002 (Caché Distribuida y Descarga de Lecturas).
- *
- * Expone la API pública del módulo hacia clientes móviles, web y otros módulos
- * del monolito modular (Reservas, Pagos, Tarifas).
+ * 
+ * Expone la API pública hacia clientes móviles/web y módulos compañeros (Reservas, Pagos).
  */
-@Slf4j
-@RestController
-@RequestMapping("/api/v1")
-@RequiredArgsConstructor
+@RestController                     // Marca esta clase como controlador REST que retorna respuestas en JSON
+@RequestMapping("/api/v1")          // Prefijo base de URL para todos los endpoints del módulo
+@RequiredArgsConstructor            // Lombok: Inyecta automáticamente dependencias 'final' vía constructor
 public class ViajeController {
 
-    // Inyección del servicio de caché y lecturas
-    private final CacheSillasService cacheSillasService;
+    private final CacheSillasService cacheSillasService; // Inyección del servicio de negocio de caché
 
     /**
-     * ENDPOINT PRINCIPAL: Consulta del Mapa Interactivo de Sillas.
-     * Ruta: GET /api/v1/viajes/{id}/sillas
-     *
-     * Comportamiento:
-     * - Consulta Redis en milisegundos.
-     * - Retorna cabecera 'X-Cache: HIT' si provino de memoria RAM (sin tocar BD).
-     * - Retorna cabecera 'X-Cache: MISS' si requirió consulta a PostgreSQL.
-     * - Retorna 'X-Response-Time-Ms' indicando la latencia exacta de respuesta (meta < 1.0s).
+     * ENDPOINT 1: Consulta del Mapa Interactivo de Sillas (Ruta: GET /api/v1/viajes/{id}/sillas)
+     * Responde en milisegundos desde Redis RAM (Hit) o consulta PostgreSQL (Miss).
      */
     @GetMapping("/viajes/{id}/sillas")
     public ResponseEntity<MapaSillasDTO> getMapaSillas(@PathVariable("id") Long id) {
-        log.info("[HTTP GET] Solicitud de mapa de sillas recibida para viaje ID: {}", id);
+        // 1. Llama al servicio que ejecuta el patrón Cache-Aside con Mutex Lock
         MapaSillasDTO mapa = cacheSillasService.getMapaSillas(id);
 
-        // Agregamos cabeceras HTTP para auditoría técnica de rendimiento y caché
+        // 2. Agrega cabeceras HTTP para auditoría técnica de rendimiento y caché (ASR 1)
         HttpHeaders headers = new HttpHeaders();
         boolean isHit = mapa.getSource() != null && mapa.getSource().contains("CACHE");
-        headers.add("X-Cache", isHit ? "HIT" : "MISS");
-        headers.add("X-Response-Time-Ms", String.valueOf(mapa.getResponseTimeMs()));
+        headers.add("X-Cache", isHit ? "HIT" : "MISS"); // Avisa si el dato vino de RAM o de disco
+        headers.add("X-Response-Time-Ms", String.valueOf(mapa.getResponseTimeMs())); // Tiempo de respuesta real
 
-        return new ResponseEntity<>(mapa, headers, HttpStatus.OK);
+        // 3. Retorna HTTP 200 (OK) con el JSON y las cabeceras
+        return ResponseEntity.ok().headers(headers).body(mapa);
     }
 
     /**
-     * Consulta de viajes programados disponibles según criterios de búsqueda.
-     * Ruta: GET /api/v1/viajes/disponibles?origen=Bogota&destino=Medellin&fecha=2026-12-01
+     * ENDPOINT 2: Consulta de Viajes Disponibles (Ruta: GET /api/v1/viajes/disponibles)
+     * Permite filtrar por ciudad de origen, destino y fecha de viaje.
      */
     @GetMapping("/viajes/disponibles")
     public ResponseEntity<List<ViajeDisponibleDTO>> getViajesDisponibles(
-            @RequestParam(value = "origen", required = false) String origen,
-            @RequestParam(value = "destino", required = false) String destino,
-            @RequestParam(value = "fecha", required = false) String fecha) {
-        log.info("[HTTP GET] Consulta de viajes disponibles (origen={}, destino={}, fecha={})", origen, destino, fecha);
-        List<ViajeDisponibleDTO> disponibles = cacheSillasService.getViajesDisponibles(origen, destino, fecha);
-        return ResponseEntity.ok(disponibles);
+            @RequestParam(required = false) String origen,   // Parámetro opcional: ej "Bogota"
+            @RequestParam(required = false) String destino,  // Parámetro opcional: ej "Medellin"
+            @RequestParam(required = false) String fecha) {  // Parámetro opcional: ej "2026-12-01"
+        return ResponseEntity.ok(cacheSillasService.getViajesDisponibles(origen, destino, fecha));
     }
 
     /**
-     * ENDPOINT DE INVALIDACIÓN POR EVENTO:
-     * Ruta: POST /api/v1/cache/invalidate
-     *
-     * Utilidad en el Monolito Modular:
-     * Invocado de inmediato cuando el módulo de Reservas o Pagos confirma o libera una silla.
-     * Borra la clave en Redis para que el próximo usuario vea el estado actualizado en tiempo real.
+     * ENDPOINT 3: Invalidación de Caché por Evento (Ruta: POST /api/v1/cache/invalidate)
+     * Invocado por los módulos de Reservas o Pagos para borrar la memoria al cambiar una silla.
      */
     @PostMapping("/cache/invalidate")
-    public ResponseEntity<Map<String, Object>> invalidateCache(@RequestBody InvalidateCacheRequest request) {
-        log.info("[HTTP POST] Evento de invalidación recibido para viajeId: {}, motivo: {}",
-                request.getViajeId(), request.getMotivo());
-
-        boolean evicted = cacheSillasService.evictMapaSillas(request.getViajeId(), request.getMotivo());
-
-        // Respuesta estructurada con confirmación de la clave removida
-        Map<String, Object> response = new HashMap<>();
-        response.put("status", "SUCCESS");
-        response.put("viajeId", request.getViajeId());
-        response.put("motivo", request.getMotivo());
-        response.put("keyEvicted", String.format("viaje:%d:mapa_sillas", request.getViajeId()));
-        response.put("cacheCleaned", evicted);
-        response.put("timestamp", System.currentTimeMillis());
-
-        return ResponseEntity.ok(response);
+    public ResponseEntity<Map<String, Object>> invalidateCache(@RequestBody InvalidateCacheRequest req) {
+        boolean evicted = cacheSillasService.evictMapaSillas(req.getViajeId(), req.getMotivo());
+        return ResponseEntity.ok(Map.of(
+                "status", "SUCCESS",
+                "viajeId", req.getViajeId(),
+                "cacheCleaned", evicted
+        ));
     }
 
     /**
-     * ENDPOINT DE OBSERVABILIDAD Y TELEMETRÍA (ASR 1):
-     * Ruta: GET /api/v1/cache/metrics
-     *
-     * Demuestra y audita que más del 85-90% de las lecturas son absorbidas por la caché
-     * y no llegan a sobrecargar la base de datos PostgreSQL.
+     * ENDPOINT 4: Métricas de Observabilidad y Telemetría (Ruta: GET /api/v1/cache/metrics)
+     * Permite verificar en vivo que más del 85% de lecturas se atienden en memoria RAM (ASR 1).
      */
     @GetMapping("/cache/metrics")
     public ResponseEntity<CacheMetricsDTO> getCacheMetrics() {
-        CacheMetricsDTO metrics = cacheSillasService.getMetrics();
-        return ResponseEntity.ok(metrics);
+        return ResponseEntity.ok(cacheSillasService.getMetrics());
     }
 
     /**
-     * PRECALENTAMIENTO DE CACHÉ (Cache Warmup):
-     * Ruta: POST /api/v1/cache/warmup/{viajeId}
-     *
-     * Usado antes de abrir ventas de temporada alta para cargar los mapas en Redis
-     * de forma proactiva, absorbiendo el primer impacto masivo de usuarios.
+     * ENDPOINT 5: Precalentamiento de Caché (Ruta: POST /api/v1/cache/warmup/{viajeId})
+     * Carga el viaje en Redis antes de iniciar la venta para absorber el impacto de usuarios.
      */
     @PostMapping("/cache/warmup/{viajeId}")
     public ResponseEntity<MapaSillasDTO> warmupCache(@PathVariable("viajeId") Long viajeId) {
-        log.info("[HTTP POST] Ejecutando Warmup de memoria para viajeId: {}", viajeId);
-        MapaSillasDTO mapa = cacheSillasService.warmupCache(viajeId);
-        return ResponseEntity.ok(mapa);
+        return ResponseEntity.ok(cacheSillasService.warmupCache(viajeId));
     }
 }

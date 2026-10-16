@@ -14,140 +14,99 @@ import java.util.Set;
 
 /**
  * IMPLEMENTACIÓN DEL REPOSITORIO DE CACHÉ CON REDIS.
- *
- * Utiliza RedisTemplate para comunicarse con Redis en el puerto 6379.
- * Contiene operaciones clave-valor de alta velocidad y mecanismos de bloqueo atómico.
+ * 
+ * Se conecta con Redis en el puerto 6379 para ejecutar operaciones atómicas
+ * en memoria RAM (lectura, escritura con TTL y cerrojos distribuidos).
  */
-@Slf4j
-@Repository
-@RequiredArgsConstructor
+@Slf4j                          // Habilita logging (mensajes de depuración y error)
+@Repository                     // Indica a Spring que es un componente de acceso a datos
+@RequiredArgsConstructor        // Genera el constructor para inyectar los 3 atributos 'final'
 public class RedisCacheRepository implements CacheRepository {
 
-    private final RedisTemplate<String, Object> redisTemplate;
-    private final DefaultRedisScript<Long> unlockScript;
-    private final ObjectMapper redisObjectMapper;
+    private final RedisTemplate<String, Object> redisTemplate; // Plantilla de Spring para interactuar con Redis
+    private final DefaultRedisScript<Long> unlockScript;        // Script Lua precompilado para liberar el Mutex Lock
+    private final ObjectMapper redisObjectMapper;              // Conversor de JSON a objetos Java con fechas compatibles
 
     /**
-     * Obtiene un valor desde Redis y lo convierte de forma segura al tipo DTO esperado.
+     * OPERACIÓN GET: Lee una clave desde Redis RAM y la convierte al tipo DTO esperado.
      */
     @Override
     public <T> Optional<T> get(String key, Class<T> targetClass) {
         try {
-            Object rawValue = redisTemplate.opsForValue().get(key);
-            if (rawValue == null) {
-                return Optional.empty(); // Clave no existe o ya expiró por TTL
-            }
-            if (targetClass.isInstance(rawValue)) {
-                return Optional.of(targetClass.cast(rawValue));
-            }
-            // Si Redis devolvió un LinkedHashMap genérico, lo transformamos al objeto DTO tipado
-            T converted = redisObjectMapper.convertValue(rawValue, targetClass);
-            return Optional.ofNullable(converted);
+            Object raw = redisTemplate.opsForValue().get(key); // Comando nativo GET de Redis
+            if (raw == null) return Optional.empty();          // Cache Miss: no existe o expiró su TTL
+            if (targetClass.isInstance(raw)) return Optional.of(targetClass.cast(raw));
+            // Convierte el JSON recibido de Redis al objeto DTO tipado
+            return Optional.ofNullable(redisObjectMapper.convertValue(raw, targetClass));
         } catch (Exception e) {
-            log.error("[CacheRepository] Error al leer la clave '{}' de Redis: {}", key, e.getMessage());
-            return Optional.empty(); // En caso de fallo en Redis, retornamos vacío para fallback a BD
+            // Si Redis se desconecta, no revienta la app: hace fallback y retorna vacío para que consulte la BD
+            log.warn("[Cache] Fallback por error al leer clave {}: {}", key, e.getMessage());
+            return Optional.empty();
         }
     }
 
     /**
-     * Guarda un valor en memoria con expiración automática (TTL en segundos).
-     * Ejecuta el comando nativo SETEX de Redis.
+     * OPERACIÓN SET: Guarda un objeto en Redis con tiempo de expiración (TTL en segundos).
+     * Equivale al comando nativo SETEX de Redis.
      */
     @Override
     public void set(String key, Object value, long ttlSeconds) {
         try {
             redisTemplate.opsForValue().set(key, value, Duration.ofSeconds(ttlSeconds));
-            log.debug("[CacheRepository] Clave '{}' almacenada con TTL={}s", key, ttlSeconds);
         } catch (Exception e) {
-            log.error("[CacheRepository] Error al escribir clave '{}' en Redis: {}", key, e.getMessage());
+            log.error("[Cache] Error al escribir clave {}: {}", key, e.getMessage());
         }
     }
 
     /**
-     * Elimina una clave específica de Redis (Comando DEL).
+     * OPERACIÓN DELETE: Elimina inmediatamente una clave de Redis (Comando DEL).
      */
     @Override
     public boolean delete(String key) {
-        try {
-            Boolean deleted = redisTemplate.delete(key);
-            return Boolean.TRUE.equals(deleted);
-        } catch (Exception e) {
-            log.error("[CacheRepository] Error al borrar clave '{}' en Redis: {}", key, e.getMessage());
-            return false;
-        }
+        Boolean res = redisTemplate.delete(key);
+        return Boolean.TRUE.equals(res);
     }
 
     /**
-     * Elimina múltiples claves que coincidan con un comodín (ej: 'viajes:disponibles:*').
+     * OPERACIÓN DELETE POR PATRÓN: Borra todas las claves que coincidan con un comodín (*).
+     * Ejemplo: "viajes:disponibles:*" borra todas las búsquedas guardadas.
      */
     @Override
     public void deleteByPattern(String pattern) {
-        try {
-            Set<String> keys = redisTemplate.keys(pattern);
-            if (keys != null && !keys.isEmpty()) {
-                redisTemplate.delete(keys);
-                log.info("[CacheRepository] Se eliminaron {} claves bajo el patrón '{}'", keys.size(), pattern);
-            }
-        } catch (Exception e) {
-            log.error("[CacheRepository] Error al purgar patrón '{}': {}", pattern, e.getMessage());
+        Set<String> keys = redisTemplate.keys(pattern);
+        if (keys != null && !keys.isEmpty()) {
+            redisTemplate.delete(keys);
         }
     }
 
     /**
-     * Verifica rápidamente si una clave existe en memoria (Comando EXISTS).
+     * OPERACIÓN EXISTS: Verifica en microsegundos si una clave existe en memoria RAM.
      */
     @Override
     public boolean exists(String key) {
-        try {
-            return Boolean.TRUE.equals(redisTemplate.hasKey(key));
-        } catch (Exception e) {
-            log.error("[CacheRepository] Error verificando existencia de clave '{}': {}", key, e.getMessage());
-            return false;
-        }
+        return Boolean.TRUE.equals(redisTemplate.hasKey(key));
     }
 
     /**
      * ADQUISICIÓN DE MUTEX LOCK DISTRIBUIDO (Anti-Cache Stampede).
-     *
      * Ejecuta atómicamente: SET lockKey lockValue NX PX expireMillis
-     * - NX: 'Not eXists' -> Solo crea la clave si NO existía previamente.
-     * - PX: Establece la expiración en milisegundos para evitar bloqueos perpetuos (deadlocks).
-     *
-     * Retorna true si este hilo fue el primero y obtuvo el permiso exclusivo.
+     * - NX (setIfAbsent): Solo guarda si la clave NO existía previamente.
+     * - PX (Duration.ofMillis): Expira a los 5 segundos para evitar bloqueos perpetuos (deadlocks).
+     * Solo el PRIMER hilo en llegar recibe 'true'; los demás reciben 'false'.
      */
     @Override
     public boolean acquireLock(String lockKey, String lockValue, long expireMillis) {
-        try {
-            Boolean acquired = redisTemplate.opsForValue().setIfAbsent(
-                    lockKey,
-                    lockValue,
-                    Duration.ofMillis(expireMillis)
-            );
-            return Boolean.TRUE.equals(acquired);
-        } catch (Exception e) {
-            log.error("[CacheRepository] Error al adquirir cerrojo Mutex '{}': {}", lockKey, e.getMessage());
-            return false;
-        }
+        Boolean acquired = redisTemplate.opsForValue().setIfAbsent(lockKey, lockValue, Duration.ofMillis(expireMillis));
+        return Boolean.TRUE.equals(acquired);
     }
 
     /**
      * LIBERACIÓN SEGURA DEL MUTEX LOCK.
-     *
-     * Envía el script Lua precompilado a Redis para que se evalúe de manera atómica:
-     * Si el valor coincide con el token UUID del hilo, borra la clave; de lo contrario no hace nada.
+     * Ejecuta el script Lua atómico para validar que el token coincida con el dueño antes de borrar.
      */
     @Override
     public boolean releaseLock(String lockKey, String lockValue) {
-        try {
-            Long result = redisTemplate.execute(
-                    unlockScript,
-                    Collections.singletonList(lockKey),
-                    lockValue
-            );
-            return result != null && result == 1L;
-        } catch (Exception e) {
-            log.error("[CacheRepository] Error al liberar cerrojo Mutex '{}': {}", lockKey, e.getMessage());
-            return false;
-        }
+        Long res = redisTemplate.execute(unlockScript, Collections.singletonList(lockKey), lockValue);
+        return res != null && res == 1L; // Retorna true si borró exitosamente
     }
 }

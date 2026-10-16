@@ -33,8 +33,6 @@ class CacheSillasServiceTest {
     @Mock
     private ViajeRepository viajeRepository;
 
-    @Mock
-    private SillaRepository sillaRepository;
 
     @InjectMocks
     private CacheSillasService cacheSillasService;
