@@ -1,0 +1,95 @@
+{
+  "info": {
+    "_postman_id": "modulo-cache-lecturas-adr002",
+    "name": "Módulo ADR-002: Caché Distribuida y Lecturas",
+    "description": "Colección de pruebas para el módulo de Caché Distribuida y Descarga de Lecturas (Cooperativa de Transporte).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Consultar Mapa de Sillas (Hit / Miss)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8080/api/v1/viajes/1/sillas",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["api", "v1", "viajes", "1", "sillas"]
+        },
+        "description": "1ra petición: X-Cache MISS (lee BD). 2da petición: X-Cache HIT (< 15ms desde Redis)."
+      }
+    },
+    {
+      "name": "2. Consultar Viajes Disponibles",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8080/api/v1/viajes/disponibles?origen=Bogota&destino=Medellin",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["api", "v1", "viajes", "disponibles"],
+          "query": [
+            { "key": "origen", "value": "Bogota" },
+            { "key": "destino", "value": "Medellin" }
+          ]
+        },
+        "description": "Listado de viajes disponibles con caché de 300s."
+      }
+    },
+    {
+      "name": "3. Invalidar Caché por Evento",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"viajeId\": 1,\n  \"motivo\": \"RESERVA_CONFIRMADA\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8080/api/v1/cache/invalidate",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["api", "v1", "cache", "invalidate"]
+        },
+        "description": "Invocado por Reservas o Pagos para limpiar la clave en Redis."
+      }
+    },
+    {
+      "name": "4. Auditar Métricas ASR 1 (Hit Ratio)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8080/api/v1/cache/metrics",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["api", "v1", "cache", "metrics"]
+        },
+        "description": "Telemetría en tiempo real: aciertos en RAM vs lecturas en BD (meta > 85%)."
+      }
+    },
+    {
+      "name": "5. Precalentamiento de Caché (Warmup)",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8080/api/v1/cache/warmup/1",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["api", "v1", "cache", "warmup", "1"]
+        },
+        "description": "Carga proactiva del viaje en RAM antes de horas pico."
+      }
+    }
+  ]
+}
