@@ -12,11 +12,16 @@ import java.time.LocalTime;
 import java.util.List;
 
 /**
- * Agrupación unificada de DTOs para el módulo de Caché y Lectura (ADR-002).
- * Reduce la dispersión de archivos y centraliza los contratos de datos de la API.
+ * CONTRATOS DE DATOS (DTOs) CONSOLIDADOS PARA LA API DE CACHÉ Y LECTURAS.
+ *
+ * Agrupa las estructuras de transferencia de datos en un solo archivo para evitar
+ * dispersión de clases y optimizar el tamaño del módulo.
  */
 public class ViajeDTOs {
 
+    /**
+     * DTO ligero para representar una silla en la vista interactiva.
+     */
     @Getter
     @Setter
     @NoArgsConstructor
@@ -28,11 +33,16 @@ public class ViajeDTOs {
         private Long id;
         private Integer numeroSilla;
         private Integer piso;
-        private String ubicacion;
-        private EstadoSilla estado;
+        private String ubicacion; // "VENTANA" o "PASILLO"
+        private EstadoSilla estado; // DISPONIBLE, RESERVADA, OCUPADA
         private BigDecimal precio;
     }
 
+    /**
+     * DTO principal del Mapa de Sillas (ADR-002):
+     * Es el objeto que se serializa y se guarda en memoria Redis.
+     * Contiene metadatos de auditoría: 'source' (procedencia del dato) y 'responseTimeMs'.
+     */
     @Getter
     @Setter
     @NoArgsConstructor
@@ -61,12 +71,15 @@ public class ViajeDTOs {
         private List<SillaDTO> sillas;
 
         private String source; // "CACHE_REDIS (Hit)" o "DATABASE_POSTGRES (Miss)"
-        private Long responseTimeMs;
+        private Long responseTimeMs; // Tiempo de respuesta en milisegundos
 
         @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
         private LocalDateTime cachedAt;
     }
 
+    /**
+     * DTO para el listado de viajes programados disponibles en el sistema.
+     */
     @Getter
     @Setter
     @NoArgsConstructor
@@ -94,6 +107,10 @@ public class ViajeDTOs {
         private String source;
     }
 
+    /**
+     * Payload para solicitud de invalidación de caché por evento.
+     * Enviado por los módulos de Reservas o Pagos.
+     */
     @Getter
     @Setter
     @NoArgsConstructor
@@ -102,10 +119,14 @@ public class ViajeDTOs {
     public static class InvalidateCacheRequest implements Serializable {
         private static final long serialVersionUID = 1L;
 
-        private Long viajeId;
-        private String motivo;
+        private Long viajeId; // ID del viaje cuya caché de sillas debe borrarse
+        private String motivo;  // Motivo descriptivo (ej: "RESERVA_CONFIRMADA", "PAGO_EXITOSO")
     }
 
+    /**
+     * DTO de Observabilidad y Métricas en tiempo real (Validación del ASR 1):
+     * Expone indicadores clave de rendimiento (KPIs de arquitectura).
+     */
     @Getter
     @Setter
     @NoArgsConstructor
@@ -114,14 +135,14 @@ public class ViajeDTOs {
     public static class CacheMetricsDTO implements Serializable {
         private static final long serialVersionUID = 1L;
 
-        private long totalRequests;
-        private long cacheHits;
-        private long cacheMisses;
-        private double hitRatioPercentage;
-        private double dbReadsSavedPercentage;
-        private long cacheInvalidations;
-        private long mutexLockAcquisitions;
-        private long mutexLockWaits;
-        private boolean asr1PerformanceTargetMet;
+        private long totalRequests; // Total de peticiones recibidas
+        private long cacheHits; // Peticiones resueltas en memoria RAM
+        private long cacheMisses; // Peticiones que requirieron ir a PostgreSQL
+        private double hitRatioPercentage; // Porcentaje de efectividad de caché
+        private double dbReadsSavedPercentage; // Carga de lectura ahorrada a la BD (meta > 85-90%)
+        private long cacheInvalidations; // Cantidad de invalidaciones ejecutadas
+        private long mutexLockAcquisitions; // Bloqueos adquiridos exitosamente
+        private long mutexLockWaits; // Hilos concurrentes protegidos de colapsar la BD
+        private boolean asr1PerformanceTargetMet; // Indica si se cumple el SLA de rendimiento
     }
 }
