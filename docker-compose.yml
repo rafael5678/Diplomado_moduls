@@ -51,16 +51,16 @@ services:
     restart: unless-stopped
 
   # --------------------------------------------------------------------------
-  # 3. Módulo de Caché y Lectura (Monolito Modular - Spring Boot)
+  # 3. Réplicas del Módulo de Transporte (Alta Disponibilidad Multi-Nodo - ADR-001)
   # --------------------------------------------------------------------------
-  api-cache-lecturas:
+  api-node-1:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: transporte_api_cache
-    ports:
-      - "8080:8080"
+    container_name: transporte_api_node_1
     environment:
+      - INSTANCE_ID=nodo-1
+      - SERVER_PORT=8080
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - DB_HOST=postgres
@@ -77,11 +77,67 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/api/v1/cache/metrics"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+    networks:
+      - transporte_net
+    restart: unless-stopped
+
+  api-node-2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: transporte_api_node_2
+    environment:
+      - INSTANCE_ID=nodo-2
+      - SERVER_PORT=8080
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=cooperativa_db
+      - DB_USER=postgres
+      - DB_PASSWORD=postgrespassword
+      - CACHE_SILLAS_TTL_SECONDS=240
+      - CACHE_VIAJES_TTL_SECONDS=300
+      - CACHE_LOCK_TIMEOUT_MILLIS=5000
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+    networks:
+      - transporte_net
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # 4. Balanceador de Carga Automático (Nginx Reverse Proxy) - ADR-001
+  # --------------------------------------------------------------------------
+  load-balancer:
+    image: nginx:alpine
+    container_name: transporte_load_balancer
+    ports:
+      - "80:80"
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api-node-1
+      - api-node-2
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/lb-health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
     networks:
       - transporte_net
     restart: unless-stopped

@@ -1,0 +1,89 @@
+{
+  "info": {
+    "_postman_id": "adr001-escalabilidad-alta-disponibilidad",
+    "name": "ADR-001 y ASR 1: Escalabilidad y Alta Disponibilidad",
+    "description": "Pruebas de endpoints para el balanceador, métricas de disponibilidad 99.95%, p95 y compras asíncronas desacopladas.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Healthcheck Balanceador Nginx",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:80/lb-health",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "80",
+          "path": ["lb-health"]
+        }
+      }
+    },
+    {
+      "name": "2. Consultar Métricas de Disponibilidad y P95",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:80/api/v1/escalabilidad/metricas",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "80",
+          "path": ["api", "v1", "escalabilidad", "metricas"]
+        }
+      }
+    },
+    {
+      "name": "3. Encolar Compra Asíncrona (Pico Temporada)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"idOrden\": \"ORD-2026-001\",\n  \"viajeId\": 1,\n  \"numeroSilla\": 10,\n  \"pasajeroNombre\": \"Juan Perez\",\n  \"pasajeroEmail\": \"juan.perez@email.com\",\n  \"pasajeroDocumento\": \"1085234567\",\n  \"monto\": 85000\n}"
+        },
+        "url": {
+          "raw": "http://localhost:80/api/v1/escalabilidad/compras",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "80",
+          "path": ["api", "v1", "escalabilidad", "compras"]
+        }
+      }
+    },
+    {
+      "name": "4. Consultar Estado de Compra Encolada",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:80/api/v1/escalabilidad/compras/ORD-2026-001",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "80",
+          "path": ["api", "v1", "escalabilidad", "compras", "ORD-2026-001"]
+        }
+      }
+    },
+    {
+      "name": "5. Simular Falla para Auditoría de Alertas (< 1 min)",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:80/api/v1/escalabilidad/simular-falla",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "80",
+          "path": ["api", "v1", "escalabilidad", "simular-falla"]
+        }
+      }
+    }
+  ]
+}
