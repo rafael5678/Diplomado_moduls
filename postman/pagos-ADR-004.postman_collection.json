@@ -1,0 +1,259 @@
+{
+  "info": {
+    "name": "Cooperativa de Transporte | Módulo de Pagos (ADR-004)",
+    "description": "Colección exclusiva del módulo de pagos de la cooperativa de transporte. Verifica creación de cobros, idempotencia, consulta por referencia y respuestas 400, 404 y 409. API local: http://localhost:8081. Pasarela simulada: estas pruebas no verifican todavía concurrencia, fallos de red, auditoría ni entrega/devolución de tiquetes en 15 minutos.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 - Cobros e idempotencia",
+      "description": "Solicitudes POST /cobros. Ejecutar primero el cobro inicial y luego repetirlo con la misma llave.",
+      "item": [
+        {
+          "name": "Crear cobro (200)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{llave}}"
+              }
+            ],
+            "url": "{{pagosUrl}}/cobros",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reservaId\": \"{{llave}}\",\n  \"documento\": \"1085\",\n  \"valorEnPesos\": 240000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 200\", () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set(\"referencia\", pm.response.json().referencia);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Repetir cobro - misma referencia (200)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{llave}}"
+              }
+            ],
+            "url": "{{pagosUrl}}/cobros",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reservaId\": \"{{llave}}\",\n  \"documento\": \"1085\",\n  \"valorEnPesos\": 240000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Misma referencia: no cobró dos veces\", () =>",
+                  "  pm.expect(pm.response.json().referencia).to.eql(pm.collectionVariables.get(\"referencia\")));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cobro sin llave (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{pagosUrl}}/cobros",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reservaId\": \"r-sin-llave\",\n  \"documento\": \"1085\",\n  \"valorEnPesos\": 1000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 400: la llave es parte del contrato\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 - Consultas y validaciones",
+      "item": [
+        {
+          "name": "Consultar pago existente (referencia guardada)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{pagosUrl}}/cobros/{{referencia}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Trae referencia y estado\", () => { const p=pm.response.json(); pm.expect(p.referencia).to.eql(pm.collectionVariables.get(\"referencia\")); pm.expect(p.estado).to.be.oneOf([\"EN_PROCESO\",\"APROBADO\",\"RECHAZADO\"]); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Consultar referencia inexistente (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{pagosUrl}}/cobros/referencia-inexistente"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 404\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"Trae mensaje de error\", () => pm.expect(pm.response.json().error).to.be.a(\"string\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Misma llave con valor diferente (409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{llave}}"
+              }
+            ],
+            "url": "{{pagosUrl}}/cobros",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reservaId\": \"{{llave}}\",\n  \"documento\": \"1085\",\n  \"valorEnPesos\": 250000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 409\", () => pm.response.to.have.status(409));",
+                  "pm.test(\"Indica conflicto de idempotencia\", () => pm.expect(pm.response.json().error).to.include(\"idempotencia\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Valor negativo (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "validacion-negativo-001"
+              }
+            ],
+            "url": "{{pagosUrl}}/cobros",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reservaId\": \"reserva-invalida\",\n  \"documento\": \"1085\",\n  \"valorEnPesos\": -100\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 400\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Consulta GET /cobros/{referencia} y validaciones HTTP 400, 404 y 409."
+    }
+  ],
+  "variable": [
+    {
+      "key": "pagosUrl",
+      "value": "http://localhost:8081"
+    },
+    {
+      "key": "llave",
+      "value": "r-demo-pagos-20261016-01"
+    },
+    {
+      "key": "referencia",
+      "value": ""
+    }
+  ]
+}
