@@ -32,6 +32,9 @@ public interface ReservaRepositoryPort {
      */
     boolean existeReservaActiva(String viajeId, String sillaId, LocalDateTime ahora);
 
+    /** Una reserva confirmada mantiene ocupada la silla indefinidamente en su viaje. */
+    boolean existeReservaConfirmada(String viajeId, String sillaId);
+
     /**
      * Consulta reservas en estado ACTIVA que hayan superado su fecha de expiración.
      */

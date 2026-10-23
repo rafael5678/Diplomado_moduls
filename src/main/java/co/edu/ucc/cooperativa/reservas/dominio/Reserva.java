@@ -92,7 +92,7 @@ public class Reserva {
      */
     public boolean estaExpirada(LocalDateTime ahora) {
         Objects.requireNonNull(ahora, "La fecha actual no puede ser nula");
-        return ahora.isAfter(this.fechaExpiracion);
+        return !ahora.isBefore(this.fechaExpiracion);
     }
 
     /**

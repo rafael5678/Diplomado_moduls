@@ -4,6 +4,7 @@ import co.edu.ucc.cooperativa.reservas.dominio.Reserva;
 import co.edu.ucc.cooperativa.reservas.dominio.SillaNoDisponibleException;
 import co.edu.ucc.cooperativa.reservas.aplicacion.puertos.entrada.ApartarSillaUseCase;
 import co.edu.ucc.cooperativa.reservas.aplicacion.puertos.salida.ReservaRepositoryPort;
+import co.edu.ucc.cooperativa.reservas.aplicacion.puertos.salida.SillaCatalogoPort;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -21,15 +22,13 @@ import java.util.Optional;
 public class ApartarSillaService implements ApartarSillaUseCase {
 
     private final ReservaRepositoryPort reservaRepository;
+    private final SillaCatalogoPort sillaCatalogo;
     private final Clock reloj;
 
-    public ApartarSillaService(ReservaRepositoryPort reservaRepository, Clock reloj) {
+    public ApartarSillaService(ReservaRepositoryPort reservaRepository, SillaCatalogoPort sillaCatalogo, Clock reloj) {
         this.reservaRepository = Objects.requireNonNull(reservaRepository, "El puerto reservaRepository es obligatorio");
+        this.sillaCatalogo = Objects.requireNonNull(sillaCatalogo, "El puerto sillaCatalogo es obligatorio");
         this.reloj = (reloj != null) ? reloj : Clock.systemDefaultZone();
-    }
-
-    public ApartarSillaService(ReservaRepositoryPort reservaRepository) {
-        this(reservaRepository, Clock.systemDefaultZone());
     }
 
     @Override
@@ -46,9 +45,14 @@ public class ApartarSillaService implements ApartarSillaUseCase {
 
         LocalDateTime ahora = LocalDateTime.now(reloj);
 
+        if (!sillaCatalogo.existeEnViaje(viajeId, sillaId)) {
+            throw new IllegalArgumentException("La silla no existe en el viaje indicado");
+        }
+
         // Regla de Negocio ADR-003: Evitar doble reserva sobre el mismo viaje mientras la silla esté ACTIVA
         boolean existeActiva = reservaRepository.existeReservaActiva(viajeId, sillaId, ahora);
-        if (existeActiva) {
+        boolean existeConfirmada = reservaRepository.existeReservaConfirmada(viajeId, sillaId);
+        if (existeActiva || existeConfirmada) {
             throw SillaNoDisponibleException.paraSilla(viajeId, sillaId);
         }
 

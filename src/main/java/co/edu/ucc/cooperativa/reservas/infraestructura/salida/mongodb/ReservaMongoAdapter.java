@@ -62,8 +62,14 @@ public class ReservaMongoAdapter implements ReservaRepositoryPort {
     }
 
     @Override
+    public boolean existeReservaConfirmada(String viajeId, String sillaId) {
+        return mongoRepository.existsByViajeIdAndSillaIdAndEstado(
+                viajeId, sillaId, EstadoReserva.CONFIRMADA.name());
+    }
+
+    @Override
     public List<Reserva> buscarReservasExpiradas(LocalDateTime ahora) {
-        return mongoRepository.findByEstadoAndFechaExpiracionBefore(EstadoReserva.ACTIVA.name(), ahora)
+        return mongoRepository.findByEstadoAndFechaExpiracionLessThanEqual(EstadoReserva.ACTIVA.name(), ahora)
                 .stream()
                 .map(this::toDomain)
                 .toList();

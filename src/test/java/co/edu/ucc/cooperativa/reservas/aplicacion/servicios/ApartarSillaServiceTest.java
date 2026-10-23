@@ -2,6 +2,7 @@ package co.edu.ucc.cooperativa.reservas.aplicacion.servicios;
 
 import co.edu.ucc.cooperativa.reservas.dominio.*;
 import co.edu.ucc.cooperativa.reservas.aplicacion.puertos.salida.ReservaRepositoryPort;
+import co.edu.ucc.cooperativa.reservas.aplicacion.puertos.salida.SillaCatalogoPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -26,6 +27,9 @@ class ApartarSillaServiceTest {
     @Mock
     private ReservaRepositoryPort reservaRepository;
 
+    @Mock
+    private SillaCatalogoPort sillaCatalogo;
+
     private Clock relojFijo;
     private ApartarSillaService service;
 
@@ -37,7 +41,7 @@ class ApartarSillaServiceTest {
     void setUp() {
         // Reloj inmutable fijado a 2026-10-23 15:00:00 UTC
         relojFijo = Clock.fixed(Instant.parse("2026-10-23T15:00:00Z"), ZoneId.of("UTC"));
-        service = new ApartarSillaService(reservaRepository, relojFijo);
+        service = new ApartarSillaService(reservaRepository, sillaCatalogo, relojFijo);
     }
 
     @Test
@@ -45,7 +49,9 @@ class ApartarSillaServiceTest {
     void debeApartarSillaExitosamente() {
         LocalDateTime ahora = LocalDateTime.now(relojFijo);
 
+        when(sillaCatalogo.existeEnViaje(viajeId, sillaId)).thenReturn(true);
         when(reservaRepository.existeReservaActiva(viajeId, sillaId, ahora)).thenReturn(false);
+        when(reservaRepository.existeReservaConfirmada(viajeId, sillaId)).thenReturn(false);
         when(reservaRepository.guardar(any(Reserva.class))).thenAnswer(inv -> inv.getArgument(0));
 
         Reserva reserva = service.apartarSilla(viajeId, sillaId, pasajeroId);
@@ -67,7 +73,9 @@ class ApartarSillaServiceTest {
     void debeEvitarDobleReservaParaMismaSillaYViaje() {
         LocalDateTime ahora = LocalDateTime.now(relojFijo);
 
+        when(sillaCatalogo.existeEnViaje(viajeId, sillaId)).thenReturn(true);
         when(reservaRepository.existeReservaActiva(viajeId, sillaId, ahora)).thenReturn(true);
+        when(reservaRepository.existeReservaConfirmada(viajeId, sillaId)).thenReturn(false);
 
         SillaNoDisponibleException ex = assertThrows(
                 SillaNoDisponibleException.class,
@@ -75,6 +83,66 @@ class ApartarSillaServiceTest {
         );
 
         assertTrue(ex.getMessage().contains("ya se encuentra apartada"));
+        verify(reservaRepository, never()).guardar(any());
+    }
+
+    @Test
+    @DisplayName("Debe permitir reservar la misma silla en viajes diferentes")
+    void debePermitirMismaSillaEnViajesDiferentes() {
+        LocalDateTime ahora = LocalDateTime.now(relojFijo);
+        String otroViaje = "VJ-COOP-02";
+        when(sillaCatalogo.existeEnViaje(viajeId, sillaId)).thenReturn(true);
+        when(sillaCatalogo.existeEnViaje(otroViaje, sillaId)).thenReturn(true);
+        when(reservaRepository.existeReservaActiva(any(), eq(sillaId), eq(ahora))).thenReturn(false);
+        when(reservaRepository.existeReservaConfirmada(any(), eq(sillaId))).thenReturn(false);
+        when(reservaRepository.guardar(any(Reserva.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Reserva primera = service.apartarSilla(viajeId, sillaId, pasajeroId);
+        Reserva segunda = service.apartarSilla(otroViaje, sillaId, "OTRO-PASAJERO");
+
+        assertEquals(viajeId, primera.getViajeId());
+        assertEquals(otroViaje, segunda.getViajeId());
+        verify(reservaRepository).guardar(primera);
+        verify(reservaRepository).guardar(segunda);
+    }
+
+    @Test
+    @DisplayName("Debe permitir reservar al llegar exactamente al vencimiento de la reserva anterior")
+    void debePermitirNuevaReservaEnElInstanteDeVencimiento() {
+        LocalDateTime ahora = LocalDateTime.now(relojFijo);
+        when(sillaCatalogo.existeEnViaje(viajeId, sillaId)).thenReturn(true);
+        when(reservaRepository.existeReservaActiva(viajeId, sillaId, ahora)).thenReturn(false);
+        when(reservaRepository.existeReservaConfirmada(viajeId, sillaId)).thenReturn(false);
+        when(reservaRepository.guardar(any(Reserva.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Reserva nueva = service.apartarSilla(viajeId, sillaId, pasajeroId);
+
+        assertEquals(EstadoReserva.ACTIVA, nueva.getEstado());
+        assertEquals(ahora.plusMinutes(10), nueva.getFechaExpiracion());
+        verify(reservaRepository).existeReservaActiva(viajeId, sillaId, ahora);
+    }
+
+    @Test
+    @DisplayName("Debe rechazar una silla que no existe en el viaje y no consultar/guardar reservas")
+    void debeRechazarSillaInexistenteEnViaje() {
+        when(sillaCatalogo.existeEnViaje(viajeId, sillaId)).thenReturn(false);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> service.apartarSilla(viajeId, sillaId, pasajeroId));
+
+        verifyNoInteractions(reservaRepository);
+    }
+
+    @Test
+    @DisplayName("Una reserva confirmada impide volver a reservar la misma silla en el mismo viaje")
+    void debeRechazarSillaConReservaConfirmada() {
+        LocalDateTime ahora = LocalDateTime.now(relojFijo);
+        when(sillaCatalogo.existeEnViaje(viajeId, sillaId)).thenReturn(true);
+        when(reservaRepository.existeReservaActiva(viajeId, sillaId, ahora)).thenReturn(false);
+        when(reservaRepository.existeReservaConfirmada(viajeId, sillaId)).thenReturn(true);
+
+        assertThrows(SillaNoDisponibleException.class,
+                () -> service.apartarSilla(viajeId, sillaId, "OTRO-PASAJERO"));
         verify(reservaRepository, never()).guardar(any());
     }
 
@@ -108,6 +176,19 @@ class ApartarSillaServiceTest {
                 () -> service.confirmarReserva(reservaVencida.getId())
         );
 
+        assertEquals(EstadoReserva.EXPIRADA, reservaVencida.getEstado());
+        verify(reservaRepository, never()).guardar(any());
+    }
+
+    @Test
+    @DisplayName("No debe confirmar una reserva exactamente al cumplir 10 minutos")
+    void debeFallarConfirmacionEnInstanteExactoDeExpiracion() {
+        LocalDateTime ahora = LocalDateTime.now(relojFijo);
+        Reserva reservaVencida = Reserva.crear(viajeId, sillaId, pasajeroId, ahora.minusMinutes(10));
+        when(reservaRepository.buscarPorId(reservaVencida.getId())).thenReturn(Optional.of(reservaVencida));
+
+        assertThrows(ReservaExpiradaException.class,
+                () -> service.confirmarReserva(reservaVencida.getId()));
         assertEquals(EstadoReserva.EXPIRADA, reservaVencida.getEstado());
         verify(reservaRepository, never()).guardar(any());
     }

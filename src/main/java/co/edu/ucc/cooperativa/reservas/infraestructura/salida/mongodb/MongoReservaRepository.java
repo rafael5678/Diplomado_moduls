@@ -20,6 +20,8 @@ public interface MongoReservaRepository extends MongoRepository<ReservaDocument,
             LocalDateTime ahora
     );
 
+    boolean existsByViajeIdAndSillaIdAndEstado(String viajeId, String sillaId, String estado);
+
     Optional<ReservaDocument> findFirstByViajeIdAndSillaIdAndEstadoAndFechaExpiracionAfter(
             String viajeId,
             String sillaId,
@@ -27,7 +29,7 @@ public interface MongoReservaRepository extends MongoRepository<ReservaDocument,
             LocalDateTime ahora
     );
 
-    List<ReservaDocument> findByEstadoAndFechaExpiracionBefore(
+    List<ReservaDocument> findByEstadoAndFechaExpiracionLessThanEqual(
             String estado,
             LocalDateTime ahora
     );

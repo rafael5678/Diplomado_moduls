@@ -42,8 +42,19 @@ class ReservaTest {
         assertFalse(reserva.estaExpirada(minuto7));
 
         LocalDateTime minuto10Exacto = ahora.plusMinutes(10);
-        assertTrue(reserva.estaActiva(minuto10Exacto));
-        assertFalse(reserva.estaExpirada(minuto10Exacto));
+        assertFalse(reserva.estaActiva(minuto10Exacto));
+        assertTrue(reserva.estaExpirada(minuto10Exacto));
+    }
+
+    @Test
+    @DisplayName("Debe expirar exactamente al cumplir los 10 minutos")
+    void debeExpirarEnElInstanteExactoDeVencimiento() {
+        LocalDateTime vencimiento = ahora.plusMinutes(10);
+
+        assertTrue(reserva.estaExpirada(vencimiento));
+        assertFalse(reserva.estaActiva(vencimiento));
+        assertThrows(ReservaExpiradaException.class, () -> reserva.confirmar(vencimiento));
+        assertEquals(EstadoReserva.EXPIRADA, reserva.getEstado());
     }
 
     @Test
