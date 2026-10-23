@@ -2,7 +2,9 @@ package co.edu.ucc.cooperativa.reservas.infraestructura.salida.mongodb;
 
 import co.edu.ucc.cooperativa.reservas.dominio.EstadoReserva;
 import co.edu.ucc.cooperativa.reservas.dominio.Reserva;
+import co.edu.ucc.cooperativa.reservas.dominio.SillaNoDisponibleException;
 import co.edu.ucc.cooperativa.reservas.aplicacion.puertos.salida.ReservaRepositoryPort;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -30,6 +32,28 @@ public class ReservaMongoAdapter implements ReservaRepositoryPort {
         ReservaDocument document = toDocument(reserva);
         ReservaDocument guardado = mongoRepository.save(document);
         return toDomain(guardado);
+    }
+
+    @Override
+    public Reserva adquirirReserva(Reserva reserva, LocalDateTime ahora) {
+        mongoRepository.liberarReservasActivasVencidas(
+                reserva.getViajeId(), reserva.getSillaId(), ahora);
+        try {
+            ReservaDocument guardado = mongoRepository.insert(toDocument(reserva));
+            return toDomain(guardado);
+        } catch (DuplicateKeyException conflicto) {
+            throw SillaNoDisponibleException.paraSilla(reserva.getViajeId(), reserva.getSillaId());
+        }
+    }
+
+    @Override
+    public Optional<Reserva> confirmarSiVigente(String reservaId, LocalDateTime ahora) {
+        long modificadas = mongoRepository.confirmarReservaActivaVigente(reservaId, ahora);
+        if (modificadas == 1) {
+            return buscarPorId(reservaId);
+        }
+        return buscarPorId(reservaId)
+                .filter(reserva -> reserva.getEstado() == EstadoReserva.CONFIRMADA);
     }
 
     @Override

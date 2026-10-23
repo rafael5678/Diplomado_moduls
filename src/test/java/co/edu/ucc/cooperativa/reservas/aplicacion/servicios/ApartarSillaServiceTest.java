@@ -50,9 +50,7 @@ class ApartarSillaServiceTest {
         LocalDateTime ahora = LocalDateTime.now(relojFijo);
 
         when(sillaCatalogo.existeEnViaje(viajeId, sillaId)).thenReturn(true);
-        when(reservaRepository.existeReservaActiva(viajeId, sillaId, ahora)).thenReturn(false);
-        when(reservaRepository.existeReservaConfirmada(viajeId, sillaId)).thenReturn(false);
-        when(reservaRepository.guardar(any(Reserva.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(reservaRepository.adquirirReserva(any(Reserva.class), eq(ahora))).thenAnswer(inv -> inv.getArgument(0));
 
         Reserva reserva = service.apartarSilla(viajeId, sillaId, pasajeroId);
 
@@ -65,7 +63,9 @@ class ApartarSillaServiceTest {
         assertEquals(ahora.plusMinutes(10), reserva.getFechaExpiracion());
         assertTrue(reserva.estaActiva(ahora));
 
-        verify(reservaRepository).guardar(any(Reserva.class));
+        verify(reservaRepository).adquirirReserva(any(Reserva.class), eq(ahora));
+        verify(reservaRepository, never()).existeReservaActiva(any(), any(), any());
+        verify(reservaRepository, never()).existeReservaConfirmada(any(), any());
     }
 
     @Test
@@ -74,8 +74,8 @@ class ApartarSillaServiceTest {
         LocalDateTime ahora = LocalDateTime.now(relojFijo);
 
         when(sillaCatalogo.existeEnViaje(viajeId, sillaId)).thenReturn(true);
-        when(reservaRepository.existeReservaActiva(viajeId, sillaId, ahora)).thenReturn(true);
-        when(reservaRepository.existeReservaConfirmada(viajeId, sillaId)).thenReturn(false);
+        when(reservaRepository.adquirirReserva(any(Reserva.class), eq(ahora)))
+                .thenThrow(SillaNoDisponibleException.paraSilla(viajeId, sillaId));
 
         SillaNoDisponibleException ex = assertThrows(
                 SillaNoDisponibleException.class,
@@ -83,7 +83,7 @@ class ApartarSillaServiceTest {
         );
 
         assertTrue(ex.getMessage().contains("ya se encuentra apartada"));
-        verify(reservaRepository, never()).guardar(any());
+        verify(reservaRepository).adquirirReserva(any(Reserva.class), eq(ahora));
     }
 
     @Test
@@ -93,17 +93,15 @@ class ApartarSillaServiceTest {
         String otroViaje = "VJ-COOP-02";
         when(sillaCatalogo.existeEnViaje(viajeId, sillaId)).thenReturn(true);
         when(sillaCatalogo.existeEnViaje(otroViaje, sillaId)).thenReturn(true);
-        when(reservaRepository.existeReservaActiva(any(), eq(sillaId), eq(ahora))).thenReturn(false);
-        when(reservaRepository.existeReservaConfirmada(any(), eq(sillaId))).thenReturn(false);
-        when(reservaRepository.guardar(any(Reserva.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(reservaRepository.adquirirReserva(any(Reserva.class), eq(ahora))).thenAnswer(inv -> inv.getArgument(0));
 
         Reserva primera = service.apartarSilla(viajeId, sillaId, pasajeroId);
         Reserva segunda = service.apartarSilla(otroViaje, sillaId, "OTRO-PASAJERO");
 
         assertEquals(viajeId, primera.getViajeId());
         assertEquals(otroViaje, segunda.getViajeId());
-        verify(reservaRepository).guardar(primera);
-        verify(reservaRepository).guardar(segunda);
+        verify(reservaRepository).adquirirReserva(primera, ahora);
+        verify(reservaRepository).adquirirReserva(segunda, ahora);
     }
 
     @Test
@@ -111,15 +109,13 @@ class ApartarSillaServiceTest {
     void debePermitirNuevaReservaEnElInstanteDeVencimiento() {
         LocalDateTime ahora = LocalDateTime.now(relojFijo);
         when(sillaCatalogo.existeEnViaje(viajeId, sillaId)).thenReturn(true);
-        when(reservaRepository.existeReservaActiva(viajeId, sillaId, ahora)).thenReturn(false);
-        when(reservaRepository.existeReservaConfirmada(viajeId, sillaId)).thenReturn(false);
-        when(reservaRepository.guardar(any(Reserva.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(reservaRepository.adquirirReserva(any(Reserva.class), eq(ahora))).thenAnswer(inv -> inv.getArgument(0));
 
         Reserva nueva = service.apartarSilla(viajeId, sillaId, pasajeroId);
 
         assertEquals(EstadoReserva.ACTIVA, nueva.getEstado());
         assertEquals(ahora.plusMinutes(10), nueva.getFechaExpiracion());
-        verify(reservaRepository).existeReservaActiva(viajeId, sillaId, ahora);
+        verify(reservaRepository).adquirirReserva(any(Reserva.class), eq(ahora));
     }
 
     @Test
@@ -138,12 +134,12 @@ class ApartarSillaServiceTest {
     void debeRechazarSillaConReservaConfirmada() {
         LocalDateTime ahora = LocalDateTime.now(relojFijo);
         when(sillaCatalogo.existeEnViaje(viajeId, sillaId)).thenReturn(true);
-        when(reservaRepository.existeReservaActiva(viajeId, sillaId, ahora)).thenReturn(false);
-        when(reservaRepository.existeReservaConfirmada(viajeId, sillaId)).thenReturn(true);
+        when(reservaRepository.adquirirReserva(any(Reserva.class), eq(ahora)))
+                .thenThrow(SillaNoDisponibleException.paraSilla(viajeId, sillaId));
 
         assertThrows(SillaNoDisponibleException.class,
                 () -> service.apartarSilla(viajeId, sillaId, "OTRO-PASAJERO"));
-        verify(reservaRepository, never()).guardar(any());
+        verify(reservaRepository).adquirirReserva(any(Reserva.class), eq(ahora));
     }
 
     @Test
@@ -153,13 +149,14 @@ class ApartarSillaServiceTest {
         Reserva reservaActiva = Reserva.crear(viajeId, sillaId, pasajeroId, ahora.minusMinutes(4));
 
         when(reservaRepository.buscarPorId(reservaActiva.getId())).thenReturn(Optional.of(reservaActiva));
-        when(reservaRepository.guardar(any(Reserva.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(reservaRepository.confirmarSiVigente(reservaActiva.getId(), ahora))
+                .thenAnswer(inv -> Optional.of(reservaActiva));
 
         Reserva confirmada = service.confirmarReserva(reservaActiva.getId());
 
         assertEquals(EstadoReserva.CONFIRMADA, confirmada.getEstado());
         assertEquals(ahora, confirmada.getFechaConfirmacion());
-        verify(reservaRepository).guardar(reservaActiva);
+        verify(reservaRepository).confirmarSiVigente(reservaActiva.getId(), ahora);
     }
 
     @Test
@@ -177,7 +174,7 @@ class ApartarSillaServiceTest {
         );
 
         assertEquals(EstadoReserva.EXPIRADA, reservaVencida.getEstado());
-        verify(reservaRepository, never()).guardar(any());
+        verify(reservaRepository, never()).confirmarSiVigente(any(), any());
     }
 
     @Test
@@ -190,7 +187,7 @@ class ApartarSillaServiceTest {
         assertThrows(ReservaExpiradaException.class,
                 () -> service.confirmarReserva(reservaVencida.getId()));
         assertEquals(EstadoReserva.EXPIRADA, reservaVencida.getEstado());
-        verify(reservaRepository, never()).guardar(any());
+        verify(reservaRepository, never()).confirmarSiVigente(any(), any());
     }
 
     @Test

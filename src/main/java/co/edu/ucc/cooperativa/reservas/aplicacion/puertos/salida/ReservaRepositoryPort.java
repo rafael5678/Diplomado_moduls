@@ -17,6 +17,12 @@ public interface ReservaRepositoryPort {
      */
     Reserva guardar(Reserva reserva);
 
+    /** Adquiere atómicamente la ocupación para viaje/silla y persiste la reserva. */
+    Reserva adquirirReserva(Reserva reserva, LocalDateTime ahora);
+
+    /** Confirma únicamente si la reserva sigue activa y vigente en persistencia. */
+    Optional<Reserva> confirmarSiVigente(String reservaId, LocalDateTime ahora);
+
     /**
      * Busca una reserva por su ID.
      */

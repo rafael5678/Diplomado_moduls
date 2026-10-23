@@ -14,7 +14,13 @@ import java.time.LocalDateTime;
 @Document(collection = "reservas")
 @CompoundIndexes({
         @CompoundIndex(name = "idx_coop_viaje_silla_estado", def = "{'viajeId': 1, 'sillaId': 1, 'estado': 1}"),
-        @CompoundIndex(name = "idx_coop_estado_expira", def = "{'estado': 1, 'fechaExpiracion': 1}")
+        @CompoundIndex(name = "idx_coop_estado_expira", def = "{'estado': 1, 'fechaExpiracion': 1}"),
+        @CompoundIndex(
+                name = "ux_coop_viaje_silla_ocupada",
+                def = "{'viajeId': 1, 'sillaId': 1}",
+                unique = true,
+                partialFilter = "{'$or': [{'ocupaSilla': true}, {'estado': {'$in': ['ACTIVA', 'CONFIRMADA']}}]}"
+        )
 })
 public class ReservaDocument {
 
@@ -29,6 +35,7 @@ public class ReservaDocument {
 
     private String pasajeroId;
     private String estado;
+    private boolean ocupaSilla;
     private LocalDateTime fechaCreacion;
     private LocalDateTime fechaExpiracion;
     private LocalDateTime fechaConfirmacion;
@@ -51,6 +58,7 @@ public class ReservaDocument {
         this.sillaId = sillaId;
         this.pasajeroId = pasajeroId;
         this.estado = estado;
+        this.ocupaSilla = "ACTIVA".equals(estado) || "CONFIRMADA".equals(estado);
         this.fechaCreacion = fechaCreacion;
         this.fechaExpiracion = fechaExpiracion;
         this.fechaConfirmacion = fechaConfirmacion;
@@ -94,6 +102,15 @@ public class ReservaDocument {
 
     public void setEstado(String estado) {
         this.estado = estado;
+        this.ocupaSilla = "ACTIVA".equals(estado) || "CONFIRMADA".equals(estado);
+    }
+
+    public boolean isOcupaSilla() {
+        return ocupaSilla;
+    }
+
+    public void setOcupaSilla(boolean ocupaSilla) {
+        this.ocupaSilla = ocupaSilla;
     }
 
     public LocalDateTime getFechaCreacion() {

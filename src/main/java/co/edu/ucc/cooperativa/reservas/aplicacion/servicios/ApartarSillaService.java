@@ -1,7 +1,7 @@
 package co.edu.ucc.cooperativa.reservas.aplicacion.servicios;
 
 import co.edu.ucc.cooperativa.reservas.dominio.Reserva;
-import co.edu.ucc.cooperativa.reservas.dominio.SillaNoDisponibleException;
+import co.edu.ucc.cooperativa.reservas.dominio.EstadoReserva;
 import co.edu.ucc.cooperativa.reservas.aplicacion.puertos.entrada.ApartarSillaUseCase;
 import co.edu.ucc.cooperativa.reservas.aplicacion.puertos.salida.ReservaRepositoryPort;
 import co.edu.ucc.cooperativa.reservas.aplicacion.puertos.salida.SillaCatalogoPort;
@@ -50,17 +50,11 @@ public class ApartarSillaService implements ApartarSillaUseCase {
         }
 
         // Regla de Negocio ADR-003: Evitar doble reserva sobre el mismo viaje mientras la silla esté ACTIVA
-        boolean existeActiva = reservaRepository.existeReservaActiva(viajeId, sillaId, ahora);
-        boolean existeConfirmada = reservaRepository.existeReservaConfirmada(viajeId, sillaId);
-        if (existeActiva || existeConfirmada) {
-            throw SillaNoDisponibleException.paraSilla(viajeId, sillaId);
-        }
-
         // Crear la entidad Reserva con estado ACTIVA y ventana de 10 minutos
         Reserva nuevaReserva = Reserva.crear(viajeId, sillaId, pasajeroId, ahora);
 
         // Persistir a través del puerto de salida
-        return reservaRepository.guardar(nuevaReserva);
+        return reservaRepository.adquirirReserva(nuevaReserva, ahora);
     }
 
     @Override
@@ -83,6 +77,21 @@ public class ApartarSillaService implements ApartarSillaUseCase {
         LocalDateTime ahora = LocalDateTime.now(reloj);
         reserva.confirmar(ahora);
 
-        return reservaRepository.guardar(reserva);
+        Optional<Reserva> confirmada = reservaRepository.confirmarSiVigente(reserva.getId(), ahora);
+        if (confirmada.isPresent()) {
+            return confirmada.get();
+        }
+
+        // No guardar el agregado cargado anteriormente: pudo cambiar en Mongo.
+        Reserva actual = reservaRepository.buscarPorId(reserva.getId())
+                .orElseThrow(() -> new IllegalArgumentException("No se encontró la reserva con ID: " + reservaId));
+        if (actual.getEstado() == EstadoReserva.CONFIRMADA) {
+            return actual;
+        }
+        if (actual.getEstado() == EstadoReserva.EXPIRADA
+                || actual.estaExpirada(ahora)) {
+            actual.confirmar(actual.getFechaExpiracion());
+        }
+        throw new IllegalStateException("La reserva cambió mientras se confirmaba: " + reservaId);
     }
 }

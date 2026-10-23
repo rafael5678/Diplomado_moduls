@@ -2,10 +2,13 @@ package co.edu.ucc.cooperativa.reservas.infraestructura.salida.mongodb;
 
 import co.edu.ucc.cooperativa.reservas.dominio.EstadoReserva;
 import co.edu.ucc.cooperativa.reservas.dominio.Reserva;
+import co.edu.ucc.cooperativa.reservas.dominio.SillaNoDisponibleException;
+import org.mockito.InOrder;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.dao.DuplicateKeyException;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -56,10 +59,55 @@ class ReservaMongoAdapterTest {
         assertEquals(SILLA_ID, documento.getSillaId());
         assertEquals(PASAJERO_ID, documento.getPasajeroId());
         assertEquals(EstadoReserva.CONFIRMADA.name(), documento.getEstado());
+        assertTrue(documento.isOcupaSilla());
         assertEquals(CREACION, documento.getFechaCreacion());
         assertEquals(EXPIRACION, documento.getFechaExpiracion());
         assertEquals(EXPIRACION.minusMinutes(2), documento.getFechaConfirmacion());
         assertDomain(reserva, resultado);
+    }
+
+    @Test
+    @DisplayName("Adquirir libera solo vencidas y luego inserta una reserva ocupante")
+    void adquirirLiberaVencidasEInsertaNuevaReserva() {
+        LocalDateTime ahora = EXPIRACION;
+        Reserva nueva = Reserva.crear(VIAJE_ID, SILLA_ID, PASAJERO_ID, ahora);
+        when(mongoRepository.insert(any(ReservaDocument.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Reserva resultado = adapter.adquirirReserva(nueva, ahora);
+
+        InOrder orden = inOrder(mongoRepository);
+        orden.verify(mongoRepository).liberarReservasActivasVencidas(VIAJE_ID, SILLA_ID, ahora);
+        ArgumentCaptor<ReservaDocument> captor = ArgumentCaptor.forClass(ReservaDocument.class);
+        orden.verify(mongoRepository).insert(captor.capture());
+        assertTrue(captor.getValue().isOcupaSilla());
+        assertEquals(nueva.getId(), resultado.getId());
+    }
+
+    @Test
+    @DisplayName("Traduce duplicado de índice a silla no disponible")
+    void adquirirTraduceClaveDuplicada() {
+        LocalDateTime ahora = CREACION;
+        Reserva nueva = Reserva.crear(VIAJE_ID, SILLA_ID, PASAJERO_ID, ahora);
+        when(mongoRepository.insert(any(ReservaDocument.class)))
+                .thenThrow(new DuplicateKeyException("duplicate key"));
+
+        assertThrows(SillaNoDisponibleException.class, () -> adapter.adquirirReserva(nueva, ahora));
+        verify(mongoRepository).liberarReservasActivasVencidas(VIAJE_ID, SILLA_ID, ahora);
+        verify(mongoRepository).insert(any(ReservaDocument.class));
+    }
+
+    @Test
+    @DisplayName("La confirmación en persistencia requiere ACTIVA y fecha de expiración futura")
+    void confirmarSiVigenteUsaActualizacionCondicional() {
+        when(mongoRepository.confirmarReservaActivaVigente(RESERVA_ID, EXPIRACION.minusSeconds(1)))
+                .thenReturn(1L);
+        when(mongoRepository.findById(RESERVA_ID)).thenReturn(Optional.of(documento(EstadoReserva.CONFIRMADA)));
+
+        Optional<Reserva> resultado = adapter.confirmarSiVigente(RESERVA_ID, EXPIRACION.minusSeconds(1));
+
+        assertEquals(EstadoReserva.CONFIRMADA, resultado.orElseThrow().getEstado());
+        verify(mongoRepository).confirmarReservaActivaVigente(RESERVA_ID, EXPIRACION.minusSeconds(1));
     }
 
     @Test
