@@ -1,0 +1,118 @@
+{
+  "info": {
+    "_postman_id": "c1f7a240-84a2-4a4b-9720-c44d71e21b8f",
+    "name": "Reservas Carnaval - Módulo Hexagonal",
+    "description": "Colección Postman para probar el adaptador REST del módulo de Reserva / Apartar Sillas en arquitectura hexagonal.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Apartar Silla (201 Created)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"viajeId\": 1,\n  \"numeroSilla\": 15,\n  \"clienteDocumento\": \"1085123456\",\n  \"minutosVigencia\": 10\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8080/api/v1/reservas",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["api", "v1", "reservas"]
+        }
+      }
+    },
+    {
+      "name": "2. Apartar Silla Ya Ocupada (409 Conflict)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"viajeId\": 1,\n  \"numeroSilla\": 15,\n  \"clienteDocumento\": \"1085999888\",\n  \"minutosVigencia\": 10\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8080/api/v1/reservas",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["api", "v1", "reservas"]
+        }
+      }
+    },
+    {
+      "name": "3. Consultar Reserva por ID (200 OK)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8080/api/v1/reservas/1",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["api", "v1", "reservas", "1"]
+        }
+      }
+    },
+    {
+      "name": "4. Confirmar Venta de Reserva (200 OK)",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8080/api/v1/reservas/1/confirmar",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["api", "v1", "reservas", "1", "confirmar"]
+        }
+      }
+    },
+    {
+      "name": "5. Cancelar Reserva Antes de Pagar (200 OK)",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8080/api/v1/reservas/1?motivo=Desistimiento%20del%20pasajero",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["api", "v1", "reservas", "1"],
+          "query": [
+            {
+              "key": "motivo",
+              "value": "Desistimiento del pasajero"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "6. Consultar Reserva Inexistente (404 Not Found)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8080/api/v1/reservas/99999",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["api", "v1", "reservas", "99999"]
+        }
+      }
+    }
+  ]
+}

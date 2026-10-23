@@ -1,0 +1,98 @@
+{
+  "info": {
+    "_postman_id": "d2a8b350-95b3-4b5c-a831-d55e82f32c9e",
+    "name": "Cooperativa de Transporte - Reservas ADR-003",
+    "description": "Colección de pruebas HTTP para el módulo de Reserva de Sillas de la Cooperativa de Transporte Intermunicipal en Arquitectura Hexagonal.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Apartar Silla (201 Created - Estado ACTIVA)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"viajeId\": \"VJ-COOP-01\",\n  \"sillaId\": \"S-15\",\n  \"pasajeroId\": \"CC-1085123456\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8080/api/v1/reservas",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["api", "v1", "reservas"]
+        }
+      }
+    },
+    {
+      "name": "2. Intento de Doble Reserva (409 Conflict - Silla ya ACTIVA)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"viajeId\": \"VJ-COOP-01\",\n  \"sillaId\": \"S-15\",\n  \"pasajeroId\": \"CC-1085999999\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8080/api/v1/reservas",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["api", "v1", "reservas"]
+        }
+      }
+    },
+    {
+      "name": "3. Consultar Reserva por ID (200 OK)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8080/api/v1/reservas/{{reservaId}}",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["api", "v1", "reservas", "{{reservaId}}"]
+        }
+      }
+    },
+    {
+      "name": "4. Confirmar Pago y Venta de Reserva (200 OK - Estado CONFIRMADA)",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8080/api/v1/reservas/{{reservaId}}/confirmar",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["api", "v1", "reservas", "{{reservaId}}", "confirmar"]
+        }
+      }
+    },
+    {
+      "name": "5. Consultar Reserva Inexistente (404 Not Found)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8080/api/v1/reservas/ID-NO-EXISTE",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["api", "v1", "reservas", "ID-NO-EXISTE"]
+        }
+      }
+    }
+  ]
+}
